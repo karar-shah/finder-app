@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Store List</title>
+</head>
+<body>
+    <form action="/search/" method="POST">
+        {% csrf_token %}
+        <h2>search word : </h2>
+        <input type="text" name="wordsearch">
+        <button>search</button>
+    </form>
+    <br>
+    <br>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>words</th>
+                <th>File_id</th>
+                <th>Delete</th> 
+            </tr>
+        </thead>
+        <tbody>
+            {% for i in store_words %} 
+            <tr>
+                <td>{{ i.word }}</td>
+                <td>{{ i.file_id.file }}</td>
+                <td><button><a href="/delete/{{ i.id }}">Delete</a></button></td>
+                <!-- <td><button><a href="/update/{{ store.id }}">Update</a></button></td> -->
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

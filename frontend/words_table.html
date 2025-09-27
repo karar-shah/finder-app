@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Search Words</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="bg-light py-5">
+    <div class="container">
+      <div class="row justify-content-center">
+        <div class="col-12 col-md-8 col-lg-6">
+          <!-- Card wrapper -->
+          <div class="card shadow-sm border-0">
+            <div class="card-header bg-primary text-white">
+              <h5 class="mb-0">Search Words</h5>
+            </div>
+
+            <div class="card-body">
+              <!-- Search form -->
+              <form action="/search/" method="POST" class="mb-4">
+                <!-- {% csrf_token %} -->
+                <div class="input-group">
+                  <input
+                    type="text"
+                    name="wordsearch"
+                    class="form-control"
+                    placeholder="Enter word..."
+                    required
+                  />
+                  <button class="btn btn-primary" type="submit">
+                    <i class="bi bi-search"></i>
+                    Search
+                  </button>
+                </div>
+              </form>
+
+              <!-- Results table -->
+              <div id="search-results" class="mt-3">
+                <div class="alert alert-info" role="alert">
+                  <i class="bi bi-info-circle me-2"></i> Enter a word above to
+                  search through all uploaded files
+                </div>
+              </div>
+
+              <div class="table-responsive d-none" id="results-table-container">
+                <table
+                  class="table table-striped table-bordered align-middle mb-0"
+                >
+                  <thead class="table-secondary">
+                    <tr>
+                      <th style="width: 40%">Word</th>
+                      <th style="width: 60%">Found In File</th>
+                    </tr>
+                  </thead>
+                  <tbody id="results-table-body">
+                    <!-- Results will appear here after search -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <!-- /card -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Bootstrap 5 bundle + Icons -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script>
+      $(document).ready(function () {
+        const API_BASE_URL = "http://127.0.0.1:8000";
+        const searchResults = $("#search-results");
+        const resultsTable = $("#results-table-container");
+        const resultsTableBody = $("#results-table-body");
+
+        // Handle search form submission
+        $("form").on("submit", function (e) {
+          e.preventDefault();
+          const searchWord = $("input[name='wordsearch']").val().trim();
+
+          if (!searchWord) {
+            showSearchMessage("Please enter a word to search for", "warning");
+            return;
+          }
+
+          // Show loading state
+          showSearchMessage(
+            `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Searching for "${searchWord}"...`,
+            "info"
+          );
+
+          // Disable search button during search
+          const submitBtn = $(this).find('button[type="submit"]');
+          submitBtn
+            .prop("disabled", true)
+            .html(
+              '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Searching...'
+            );
+
+          $.ajax({
+            url: `${API_BASE_URL}/filetbl/`,
+            type: "GET",
+            dataType: "json",
+            success: function (response) {
+              if (!response.data || !Array.isArray(response.data)) {
+                showSearchMessage("Invalid response from server", "danger");
+                return;
+              }
+
+              // Filter for matching words (case-insensitive)
+              const matches = response.data.filter(
+                (item) => item.word.toLowerCase() === searchWord.toLowerCase()
+              );
+
+              if (matches.length === 0) {
+                showSearchMessage(
+                  `No matches found for "${searchWord}"`,
+                  "warning"
+                );
+                resultsTable.addClass("d-none");
+                return;
+              }
+
+              // Process matches to get unique filenames
+              const fileResults = new Map();
+
+              matches.forEach((item) => {
+                if (item.file) {
+                  // Get the full path and extract filename
+                  const filePath = item.file;
+                  const fileName = filePath.split("/").pop();
+
+                  // Store word and occurrence count by filename
+                  if (!fileResults.has(fileName)) {
+                    fileResults.set(fileName, {
+                      word: item.word,
+                      count: 1,
+                    });
+                  } else {
+                    fileResults.get(fileName).count++;
+                  }
+                }
+              });
+
+              // Show search message
+              showSearchMessage(
+                `Found "${searchWord}" in ${fileResults.size} file(s)`,
+                "success"
+              );
+
+              // Populate results table
+              resultsTableBody.empty();
+              resultsTable.removeClass("d-none");
+
+              let index = 1;
+              fileResults.forEach((result, fileName) => {
+                // Shorten long filenames for display
+                const shortName =
+                  fileName.length > 40
+                    ? fileName.substring(0, 37) + "..."
+                    : fileName;
+
+                // Create occurrence text (singular/plural)
+                const occurrenceText =
+                  result.count > 1
+                    ? `${result.count} occurrences`
+                    : `${result.count} occurrence`;
+
+                const row = `
+                <tr>
+                  <td>${result.word}</td>
+                  <td title="${fileName}">
+                    <span class="fw-medium">${shortName}</span>
+                    <span class="badge bg-secondary ms-2">${occurrenceText}</span>
+                  </td>
+                </tr>`;
+                resultsTableBody.append(row);
+              });
+            },
+            error: function (error) {
+              console.error("Search failed:", error);
+              showSearchMessage(
+                "Error while searching. Check if the backend server is running.",
+                "danger"
+              );
+            },
+            complete: function () {
+              // Re-enable search button
+              submitBtn
+                .prop("disabled", false)
+                .html('<i class="bi bi-search"></i> Search');
+            },
+          });
+        });
+
+        // Helper function to show search messages
+        function showSearchMessage(message, type) {
+          searchResults.html(`
+            <div class="alert alert-${type}" role="alert">
+              ${
+                type === "info"
+                  ? message
+                  : `<i class="bi bi-${getAlertIcon(type)} me-2"></i>${message}`
+              }
+            </div>
+          `);
+        }
+
+        // Helper to get the appropriate Bootstrap icon for alert type
+        function getAlertIcon(type) {
+          switch (type) {
+            case "success":
+              return "check-circle";
+            case "danger":
+              return "exclamation-triangle";
+            case "warning":
+              return "exclamation-circle";
+            default:
+              return "info-circle";
+          }
+        }
+      });
+    </script>
+  </body>
+</html>
