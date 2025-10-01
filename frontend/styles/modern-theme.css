@@ -546,7 +546,7 @@ body {
   border-radius: var(--radius-lg);
   padding: 2rem;
   box-shadow: var(--shadow);
-  margin-top: 2rem;
+  /* margin-top: 2rem; */
   border-left: 4px solid var(--success-color);
   width: 100%;
   box-sizing: border-box;
@@ -696,8 +696,8 @@ body {
 .btn-danger-modern:focus,
 .btn-success-modern:focus,
 .form-control-modern:focus {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
+  outline: 1px thin var(--primary-color);
+  /* outline-offset: 2px; */
 }
 
 /* Custom scrollbar */
@@ -1044,8 +1044,8 @@ body {
 
 /* Improved focus states */
 *:focus {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
+  outline: 2px thin var(--primary-color);
+  /* outline-offset: 2px; */
   box-shadow: 0 0 0 3px rgba(54, 41, 183, 0.1);
 }
 
@@ -1053,8 +1053,8 @@ button:focus,
 input:focus,
 select:focus,
 textarea:focus {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 1px;
+  outline: 1px thin var(--primary-color);
+  /* outline-offset: 2px; */
 }
 
 /* Smooth scrolling */
