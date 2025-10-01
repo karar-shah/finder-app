@@ -35,6 +35,19 @@ class APIClient {
   }
 
   /**
+   * Upload directory (as ZIP)
+   */
+  async uploadDirectory(files) {
+    const uploadUrl = `${this.API_BASE_URL}/upload-directory/`;
+
+    if (this.isElectron) {
+      return await this._uploadDirectoryElectron(files, uploadUrl);
+    } else {
+      return await this._uploadDirectoryWeb(files, uploadUrl);
+    }
+  }
+
+  /**
    * Get uploaded files list
    */
   async getFilesList() {
@@ -42,10 +55,17 @@ class APIClient {
   }
 
   /**
-   * Delete file by ID
+   * Delete file by ID (deletes entire file with all words and physical file)
    */
   async deleteFile(fileId) {
-    return await this.makeRequest(`/filetbl/${fileId}`, "DELETE");
+    return await this.makeRequest(`/api/delete-file/${fileId}`, "DELETE");
+  }
+
+  /**
+   * Delete all files and clear database
+   */
+  async clearAllFiles() {
+    return await this.makeRequest("/api/clear-all/", "DELETE");
   }
 
   /**
@@ -181,6 +201,124 @@ class APIClient {
           });
         },
       });
+    });
+  }
+
+  async _uploadDirectoryElectron(files, uploadUrl) {
+    try {
+      // Create ZIP file from directory files
+      const zip = new JSZip();
+
+      // Add files to ZIP maintaining directory structure
+      const filePromises = Array.from(files).map(async (file) => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = function (event) {
+            const arrayBuffer = event.target.result;
+            const relativePath = file.webkitRelativePath || file.name;
+            zip.file(relativePath, arrayBuffer);
+            resolve();
+          };
+          reader.onerror = reject;
+          reader.readAsArrayBuffer(file);
+        });
+      });
+
+      await Promise.all(filePromises);
+
+      // Generate ZIP file
+      const zipBlob = await zip.generateAsync({ type: "arraybuffer" });
+      const zipUint8Array = new Uint8Array(zipBlob);
+
+      // Upload ZIP via Electron
+      const zipFile = {
+        buffer: Array.from(zipUint8Array),
+        name: "directory.zip",
+        size: zipBlob.byteLength,
+        type: "application/zip",
+      };
+
+      const response = await window.electronAPI.uploadDirectory(
+        [zipFile],
+        uploadUrl
+      );
+      return response;
+    } catch (error) {
+      throw new Error(`Electron directory upload failed: ${error.message}`);
+    }
+  }
+
+  async _uploadDirectoryWeb(files, uploadUrl) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        console.log("Starting directory upload, files:", files.length);
+        console.log("JSZip available:", typeof JSZip !== "undefined");
+
+        // Create ZIP file from directory files
+        const zip = new JSZip();
+
+        // Add files to ZIP maintaining directory structure
+        const filePromises = Array.from(files).map(async (file) => {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = function (event) {
+              const arrayBuffer = event.target.result;
+              const relativePath = file.webkitRelativePath || file.name;
+              zip.file(relativePath, arrayBuffer);
+              resolve();
+            };
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(file);
+          });
+        });
+
+        await Promise.all(filePromises);
+
+        console.log("All files processed, generating ZIP...");
+
+        // Generate ZIP file
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+
+        console.log("ZIP generated, size:", zipBlob.size);
+
+        // Upload ZIP file
+        const formData = new FormData();
+        formData.append("directory_zip", zipBlob, "directory.zip");
+
+        console.log(
+          "Uploading directory via web:",
+          files.length,
+          "files as ZIP"
+        );
+
+        $.ajax({
+          url: uploadUrl,
+          type: "POST",
+          data: formData,
+          processData: false,
+          contentType: false,
+          success: function (response) {
+            resolve({
+              success: true,
+              data: response,
+              status: 200,
+            });
+          },
+          error: function (xhr, status, error) {
+            reject({
+              success: false,
+              status: xhr.status,
+              error: error,
+              responseText: xhr.responseText,
+            });
+          },
+        });
+      } catch (error) {
+        reject({
+          success: false,
+          error: error.message,
+        });
+      }
     });
   }
 }

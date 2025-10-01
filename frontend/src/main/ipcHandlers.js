@@ -15,6 +15,9 @@ class IPCHandlers {
 
     // File upload handler
     ipcMain.handle("upload-files", this.handleFileUpload.bind(this));
+
+    // Directory upload handler
+    ipcMain.handle("upload-directory", this.handleDirectoryUpload.bind(this));
   }
 
   async handleHttpRequest(event, options) {
@@ -183,6 +186,92 @@ class IPCHandlers {
 
         res.on("error", (error) => {
           console.error("Upload response error:", error);
+          reject({ error: error.message, success: false });
+        });
+      });
+    });
+  }
+
+  async handleDirectoryUpload(event, files, uploadUrl) {
+    return new Promise((resolve, reject) => {
+      const form = new FormData();
+
+      console.log(
+        "Uploading directory:",
+        files.map((f) => ({ name: f.name, size: f.size }))
+      );
+
+      files.forEach((file, index) => {
+        if (file.buffer && Array.isArray(file.buffer)) {
+          // Convert array back to Buffer
+          const buffer = Buffer.from(file.buffer);
+          // Use 'directory_zip' as the field name for directory uploads
+          form.append("directory_zip", buffer, file.name);
+        } else {
+          reject({
+            error: `File buffer missing or invalid for: ${file.name}`,
+            success: false,
+          });
+          return;
+        }
+      });
+
+      const urlObj = new URL(uploadUrl);
+
+      const options = {
+        host: urlObj.hostname,
+        port: urlObj.port || (urlObj.protocol === "https:" ? 443 : 80),
+        path: urlObj.pathname,
+        protocol: urlObj.protocol,
+        headers: form.getHeaders(),
+      };
+
+      console.log("Directory upload options:", options);
+
+      form.submit(options, (err, res) => {
+        if (err) {
+          console.error("Directory upload error:", err);
+          reject({ error: err.message, success: false });
+          return;
+        }
+
+        let responseData = "";
+        res.on("data", (chunk) => {
+          responseData += chunk.toString();
+        });
+
+        res.on("end", () => {
+          console.log("Directory upload response:", {
+            status: res.statusCode,
+            body:
+              responseData.substring(0, 200) +
+              (responseData.length > 200 ? "..." : ""),
+          });
+
+          try {
+            const jsonData = JSON.parse(responseData);
+            resolve({
+              status: res.statusCode,
+              data: jsonData,
+              success: res.statusCode >= 200 && res.statusCode < 300,
+            });
+          } catch (e) {
+            // Handle HTML responses (like Django success pages)
+            const isSuccess = res.statusCode >= 200 && res.statusCode < 300;
+            resolve({
+              status: res.statusCode,
+              data: {
+                message: isSuccess
+                  ? "Directory uploaded successfully"
+                  : responseData,
+              },
+              success: isSuccess,
+            });
+          }
+        });
+
+        res.on("error", (error) => {
+          console.error("Directory upload response error:", error);
           reject({ error: error.message, success: false });
         });
       });

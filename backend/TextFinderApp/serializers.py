@@ -15,6 +15,10 @@ class FileWordsSerializers(serializers.ModelSerializer):
         source='file_id.original_filename',
         read_only=True
     )
+    file_id = serializers.IntegerField(
+        source='file_id.id',
+        read_only=True
+    )
     class Meta:
         model = FileWords
-        fields = ['id','word','file','original_filename']
+        fields = ['id','word','file','original_filename','file_id']

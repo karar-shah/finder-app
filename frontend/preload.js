@@ -10,6 +10,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   uploadFiles: (files, uploadUrl) =>
     ipcRenderer.invoke("upload-files", files, uploadUrl),
 
+  // Directory upload method
+  uploadDirectory: (files, uploadUrl) =>
+    ipcRenderer.invoke("upload-directory", files, uploadUrl),
+
   // Check if running in Electron
   isElectron: true,
 
