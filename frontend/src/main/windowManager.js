@@ -10,11 +10,14 @@ class WindowManager {
   createSplashWindow() {
     // Create the splash screen window
     this.splashWindow = new BrowserWindow({
-      width: 500,
-      height: 400,
+      width: 900,
+      height: 700,
       frame: false,
       transparent: true,
       resizable: false,
+      center: false,
+      alwaysOnTop: false,
+      skipTaskbar: true,
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: false,
@@ -38,6 +41,7 @@ class WindowManager {
       width: 900,
       height: 700,
       show: false,
+      backgroundColor: "#f8f9fa", // Match Bootstrap bg-light to prevent flash
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -57,9 +61,15 @@ class WindowManager {
 
     // Show window when ready
     this.mainWindow.once("ready-to-show", () => {
-      // Close the splash screen
-      if (this.splashWindow) this.splashWindow.close();
+      // Ensure smooth transition by showing main window first, then closing splash
       this.mainWindow.show();
+
+      // Close splash window after a brief delay to ensure smooth transition
+      setTimeout(() => {
+        if (this.splashWindow) {
+          this.splashWindow.close();
+        }
+      }, 100);
     });
 
     // Handle window close

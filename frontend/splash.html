@@ -104,10 +104,7 @@
 
         if (progress >= 100) {
           clearInterval(interval);
-          // Redirect to main app after loading completes
-          setTimeout(() => {
-            window.location.href = "index.html";
-          }, 500);
+          // Loading complete - the main process will handle window transition
         }
       }, 100);
     </script>

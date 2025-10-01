@@ -14,9 +14,10 @@ app.whenReady().then(() => {
   windowManager.createSplashWindow();
 
   // Create the main window after a delay to simulate loading
+  // Increased delay to ensure splash screen completes its animation
   setTimeout(() => {
     windowManager.createMainWindow();
-  }, 3000);
+  }, 2500);
 });
 
 // Quit when all windows are closed, except on macOS
