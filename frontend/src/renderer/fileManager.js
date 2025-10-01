@@ -13,6 +13,7 @@ class FileManager {
    */
   init() {
     this.setupEventHandlers();
+    this.setupDragAndDrop();
     this.loadUploadedFiles();
   }
 
@@ -30,6 +31,65 @@ class FileManager {
     $("#search-btn").on("click", () => {
       this.navigateToSearch();
     });
+
+    // Handle clear all button click
+    $("#clear-all-btn").on("click", () => {
+      this.handleClearAll();
+    });
+
+    // Handle file input change
+    $("#files").on("change", (e) => {
+      this.handleFileSelection(e.target.files);
+    });
+  }
+
+  /**
+   * Setup drag and drop functionality
+   */
+  setupDragAndDrop() {
+    const uploadArea = $("#upload-area");
+
+    uploadArea.on("dragover", (e) => {
+      e.preventDefault();
+      uploadArea.addClass("dragover");
+    });
+
+    uploadArea.on("dragleave", (e) => {
+      e.preventDefault();
+      uploadArea.removeClass("dragover");
+    });
+
+    uploadArea.on("drop", (e) => {
+      e.preventDefault();
+      uploadArea.removeClass("dragover");
+
+      const files = e.originalEvent.dataTransfer.files;
+      if (files.length > 0) {
+        $("#files")[0].files = files;
+        this.handleFileSelection(files);
+      }
+    });
+  }
+
+  /**
+   * Handle file selection (from input or drag-drop)
+   */
+  handleFileSelection(files) {
+    if (files && files.length > 0) {
+      const fileNames = Array.from(files)
+        .map((file) => file.name)
+        .join(", ");
+      const uploadArea = $("#upload-area");
+
+      uploadArea
+        .find(".file-upload-text")
+        .html(`<strong>${files.length} file(s) selected:</strong>`);
+      uploadArea
+        .find(".file-upload-hint")
+        .text(
+          fileNames.length > 50 ? fileNames.substring(0, 50) + "..." : fileNames
+        );
+    }
   }
 
   /**
@@ -163,28 +223,45 @@ class FileManager {
    */
   displayFilesInTable(fileMap) {
     this.filesTableBody.empty();
+    this.updateFileCount(fileMap.size);
 
     if (fileMap.size === 0) {
-      this.filesTableBody.append(
-        `<tr><td colspan="3" class="text-center">No files uploaded yet</td></tr>`
-      );
+      this.filesTableBody.append(`
+        <tr>
+          <td colspan="3" class="text-center">
+            <div class="no-results">
+              <div class="no-results-icon">
+                <i class="bi bi-file-earmark-plus"></i>
+              </div>
+              <div>No files uploaded yet</div>
+            </div>
+          </td>
+        </tr>
+      `);
       return;
     }
 
     let index = 1;
     fileMap.forEach((fileData, fileName) => {
       const shortName =
-        fileName.length > 30 ? fileName.substring(0, 27) + "..." : fileName;
+        fileName.length > 35 ? fileName.substring(0, 32) + "..." : fileName;
 
       const row = `
-        <tr data-filename="${fileName}" data-ids="${fileData.ids.join(",")}">
-          <td>${index}</td>
-          <td title="${fileName}">${shortName}</td>
+        <tr data-filename="${fileName}" data-ids="${fileData.ids.join(
+        ","
+      )}" class="slide-up">
+          <td><span class="badge bg-primary">${index}</span></td>
+          <td title="${fileName}">
+            <div class="d-flex align-items-center">
+              <i class="bi bi-file-earmark-text text-primary me-2"></i>
+              <span>${shortName}</span>
+            </div>
+          </td>
           <td>
-            <button class="btn btn-sm btn-danger delete-file" data-filename="${fileName}" data-ids="${fileData.ids.join(
+            <button class="btn-danger-modern delete-file" data-filename="${fileName}" data-ids="${fileData.ids.join(
         ","
       )}">
-              <i class="bi bi-trash"></i> Delete
+              <i class="bi bi-trash"></i>
             </button>
           </td>
         </tr>`;
@@ -207,6 +284,15 @@ class FileManager {
   }
 
   /**
+   * Update file count badge
+   */
+  updateFileCount(count) {
+    const badge = $("#file-count-badge");
+    badge.text(count);
+    badge.toggleClass("d-none", count === 0);
+  }
+
+  /**
    * Delete file
    */
   async deleteFile(ids, row) {
@@ -222,11 +308,24 @@ class FileManager {
       this.showStatus(`${fileName} deleted successfully`, "success");
       row.remove();
 
-      // Check if table is empty
-      if (this.filesTableBody.find("tr").length === 0) {
-        this.filesTableBody.append(
-          '<tr><td colspan="3" class="text-center">No files uploaded yet</td></tr>'
-        );
+      // Check if table is empty and update display
+      const remainingRows = this.filesTableBody.find("tr[data-ids]").length;
+      if (remainingRows === 0) {
+        this.filesTableBody.append(`
+          <tr>
+            <td colspan="3" class="text-center">
+              <div class="no-results">
+                <div class="no-results-icon">
+                  <i class="bi bi-file-earmark-plus"></i>
+                </div>
+                <div>No files uploaded yet</div>
+              </div>
+            </td>
+          </tr>
+        `);
+        this.updateFileCount(0);
+      } else {
+        this.updateFileCount(remainingRows);
       }
     } catch (error) {
       console.error("Failed to delete file:", error);
@@ -248,19 +347,54 @@ class FileManager {
   }
 
   /**
+   * Handle clear all files
+   */
+  async handleClearAll() {
+    const rows = this.filesTableBody.find("tr[data-ids]");
+    if (rows.length === 0) {
+      this.showStatus("No files to clear", "info");
+      return;
+    }
+
+    if (!confirm("Are you sure you want to delete all uploaded files?")) {
+      return;
+    }
+
+    this.showStatus("Clearing all files...", "info");
+
+    try {
+      const deletePromises = [];
+      rows.each((index, row) => {
+        const ids = $(row).data("ids").toString().split(",");
+        ids.forEach((id) => {
+          deletePromises.push(this.apiClient.deleteFile(id));
+        });
+      });
+
+      await Promise.all(deletePromises);
+      this.showStatus("All files cleared successfully", "success");
+      this.loadUploadedFiles();
+    } catch (error) {
+      console.error("Failed to clear all files:", error);
+      this.showStatus("Error clearing files", "danger");
+    }
+  }
+
+  /**
    * Helper function to show status messages
    */
   showStatus(message, type) {
+    const statusClass = `status-${type}`;
     this.uploadStatus.html(`
-      <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+      <div class="status-message ${statusClass} fade-in">
         ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        <button type="button" class="btn-close" onclick="this.parentElement.remove()" aria-label="Close" style="float: right; background: none; border: none; font-size: 1.2rem; cursor: pointer;">&times;</button>
       </div>
     `);
 
     if (type === "success") {
       setTimeout(() => {
-        this.uploadStatus.find(".alert").alert("close");
+        this.uploadStatus.find(".status-message").fadeOut();
       }, 5000);
     }
   }

@@ -3,95 +3,173 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Search Words</title>
-
-    <!-- Bootstrap 5 CSS -->
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    />
+    <title>Search Words - Text Finder App</title>
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="styles/modern-theme.css" />
   </head>
-  <body class="bg-light py-5">
-    <div class="container">
-      <div class="row justify-content-center">
-        <div class="col-12 col-md-8 col-lg-6">
-          <!-- Card wrapper -->
-          <div class="card shadow-sm border-0">
-            <div
-              class="card-header bg-primary text-white d-flex justify-content-between align-items-center"
-            >
-              <h5 class="mb-0">Search Words</h5>
-              <button id="upload-btn" class="btn btn-light btn-sm">
-                <i class="bi bi-upload"></i> Upload Files
-              </button>
+  <body>
+    <div class="app-container">
+      <!-- App Header -->
+      <header class="app-header">
+        <div
+          class="container-fluid d-flex justify-content-between align-items-center"
+        >
+          <div>
+            <h1 class="app-title">
+              <div class="app-title-icon">
+                <i class="bi bi-search"></i>
+              </div>
+              Word Search
+            </h1>
+            <p class="app-subtitle">
+              Find words across all your uploaded files
+            </p>
+          </div>
+          <button id="upload-btn" class="btn-secondary-modern">
+            <i class="bi bi-arrow-left me-2"></i>
+            Back to Upload
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <main class="row g-4 main-content">
+        <!-- Search Section -->
+        <div class="col-12 col-lg-4 sidebar">
+          <div class="search-section fade-in">
+            <div class="card-header-modern">
+              <h2 class="card-title">
+                <i class="bi bi-funnel"></i>
+                Search Configuration
+              </h2>
             </div>
 
-            <div class="card-body">
-              <!-- Search form -->
-              <form action="/search/" method="POST" class="mb-4">
-                <!-- {% csrf_token %} -->
-                <div class="mb-3">
-                  <div class="input-group">
-                    <input
-                      type="text"
-                      name="wordsearch"
-                      class="form-control"
-                      placeholder="Enter word..."
-                      required
-                    />
-                    <button class="btn btn-primary" type="submit">
-                      <i class="bi bi-search"></i>
-                      Search
-                    </button>
-                  </div>
-                </div>
-                <div class="form-check form-check-inline">
+            <!-- Search form -->
+            <form action="/search/" method="POST" id="search-form">
+              <div class="mb-3">
+                <label class="form-label-modern" for="wordsearch">
+                  Search Term
+                </label>
+                <div class="input-group-modern">
                   <input
-                    class="form-check-input"
+                    type="text"
+                    name="wordsearch"
+                    id="wordsearch"
+                    class="form-control-modern"
+                    placeholder="Enter word to search..."
+                    required
+                  />
+                  <button class="btn-primary-modern" type="submit">
+                    <i class="bi bi-search me-1"></i>
+                    Search
+                  </button>
+                </div>
+              </div>
+
+              <div class="search-options">
+                <div class="radio-group">
+                  <input
+                    class="radio-input"
                     type="radio"
                     name="search_type"
                     id="exactMatch"
                     value="exact"
                     checked
                   />
-                  <label class="form-check-label" for="exactMatch"
-                    >Exact match</label
-                  >
+                  <label class="radio-label" for="exactMatch">
+                    Exact match
+                  </label>
                 </div>
-                <div class="form-check form-check-inline">
+                <div class="radio-group">
                   <input
-                    class="form-check-input"
+                    class="radio-input"
                     type="radio"
                     name="search_type"
                     id="containsMatch"
                     value="contains"
                   />
-                  <label class="form-check-label" for="containsMatch"
-                    >Contains</label
-                  >
-                </div>
-              </form>
-
-              <!-- Results table -->
-              <div id="search-results" class="mt-3">
-                <div class="alert alert-info" role="alert">
-                  <i class="bi bi-info-circle me-2"></i> Enter a word above to
-                  search through all uploaded files
+                  <label class="radio-label" for="containsMatch">
+                    Contains word
+                  </label>
                 </div>
               </div>
+            </form>
 
-              <div class="table-responsive d-none" id="results-table-container">
-                <table
-                  class="table table-striped table-bordered align-middle mb-0"
+            <div class="section-divider"></div>
+
+            <!-- Search Statistics -->
+            <div id="search-stats" class="d-none">
+              <h3 class="card-title mb-3">
+                <i class="bi bi-graph-up"></i>
+                Search Statistics
+              </h3>
+              <div class="row g-3">
+                <div class="col-6">
+                  <div
+                    class="text-center p-3 rounded"
+                    style="background: var(--background-light)"
+                  >
+                    <div class="h4 text-primary mb-1" id="total-matches">0</div>
+                    <div class="small text-muted">Total Matches</div>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div
+                    class="text-center p-3 rounded"
+                    style="background: var(--background-light)"
+                  >
+                    <div class="h4 text-success mb-1" id="files-found">0</div>
+                    <div class="small text-muted">Files Found</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="col-12 col-lg-8 content-area">
+          <div class="results-section fade-in">
+            <div class="card-header-modern">
+              <h2 class="card-title">
+                <i class="bi bi-list-ul"></i>
+                Search Results
+                <span
+                  id="results-count-badge"
+                  class="badge bg-primary ms-2 d-none"
+                  >0</span
                 >
-                  <thead class="table-secondary">
+              </h2>
+            </div>
+
+            <!-- Default state -->
+            <div id="search-results" class="mt-3">
+              <div class="no-results">
+                <div class="no-results-icon">
+                  <i class="bi bi-search"></i>
+                </div>
+                <div>
+                  <h4>Ready to Search</h4>
+                  <p>
+                    Enter a search term to find words across all your uploaded
+                    files
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Results table -->
+            <div class="d-none" id="results-table-container">
+              <div class="table-responsive">
+                <table class="table-modern w-100">
+                  <thead>
                     <tr>
-                      <th style="width: 40%">Word</th>
-                      <th style="width: 60%">Found In File</th>
+                      <th style="width: 40%">Word Match</th>
+                      <th style="width: 50%">Found In File</th>
+                      <th style="width: 10%">Count</th>
                     </tr>
                   </thead>
                   <tbody id="results-table-body">
@@ -100,29 +178,73 @@
                 </table>
               </div>
             </div>
+
+            <!-- Loading state -->
+            <div id="search-loading" class="d-none">
+              <div class="no-results">
+                <div class="no-results-icon">
+                  <div class="loading-spinner"></div>
+                </div>
+                <div>
+                  <h4>Searching...</h4>
+                  <p>Please wait while we search through your files</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- No results state -->
+            <div id="no-results" class="d-none">
+              <div class="no-results">
+                <div class="no-results-icon">
+                  <i class="bi bi-search-heart"></i>
+                </div>
+                <div>
+                  <h4>No Results Found</h4>
+                  <p>
+                    The search term was not found in any of your uploaded files
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
-          <!-- /card -->
         </div>
-      </div>
+      </main>
     </div>
 
-    <!-- Bootstrap 5 bundle + Icons -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    
+
     <!-- Import modular components -->
+    <script src="src/renderer/themeManager.js"></script>
     <script src="src/renderer/apiClient.js"></script>
     <script src="src/renderer/searchManager.js"></script>
-    
+
     <script>
       $(document).ready(function () {
+        // Add fade-in animation to elements
+        setTimeout(() => {
+          $(".fade-in").addClass("animate__fadeIn");
+        }, 100);
+
         // Initialize API client
         const apiClient = new APIClient();
-        
+
         // Initialize search manager
         const searchManager = new SearchManager(apiClient);
         searchManager.init();
+
+        // Add modern interactions
+        $(".search-section, .results-section").hover(
+          function () {
+            $(this).addClass("shadow-lg");
+          },
+          function () {
+            $(this).removeClass("shadow-lg");
+          }
+        );
+
+        // Auto-focus search input
+        $("#wordsearch").focus();
       });
     </script>
   </body>

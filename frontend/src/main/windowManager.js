@@ -38,8 +38,8 @@ class WindowManager {
   createMainWindow() {
     // Create the main application window
     this.mainWindow = new BrowserWindow({
-      width: 900,
-      height: 700,
+      width: 1400,
+      height: 1100,
       show: false,
       backgroundColor: "#f8f9fa", // Match Bootstrap bg-light to prevent flash
       webPreferences: {

@@ -5,92 +5,173 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Text Finder App</title>
     <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    />
-    <link
       href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="styles/modern-theme.css" />
   </head>
-  <body class="bg-light py-5">
-    <div class="container">
-      <!-- Card wrapper -->
-      <div class="card shadow-sm border-0 mx-auto" style="max-width: 600px">
-        <div class="card-header bg-primary text-white">
-          <h5 class="mb-0">Text Finder App</h5>
+  <body>
+    <div class="app-container">
+      <!-- App Header -->
+      <header class="app-header">
+        <div class="container-fluid">
+          <h1 class="app-title">
+            <div class="app-title-icon">
+              <i class="bi bi-search"></i>
+            </div>
+            Text Finder App
+          </h1>
+          <p class="app-subtitle">
+            Extract and search words from multiple file formats
+          </p>
         </div>
+      </header>
 
-        <div class="card-body">
-          <!-- Upload form -->
-          <form id="upload-form" class="mb-4">
-            <div class="mb-3">
-              <label for="files" class="form-label fw-semibold"
-                >Choose file(s)</label
-              >
+      <!-- Main Content -->
+      <main class="row g-4 main-content">
+        <!-- Upload Section -->
+        <div class="col-12 col-lg-6 equal-height">
+          <div class="modern-card fade-in">
+            <div class="card-header-modern">
+              <h2 class="card-title">
+                <i class="bi bi-cloud-upload"></i>
+                Upload Files
+              </h2>
+            </div>
+
+            <!-- Upload Area -->
+            <div class="file-upload-area" id="upload-area">
+              <div class="file-upload-icon">
+                <i class="bi bi-file-earmark-arrow-up"></i>
+              </div>
+              <div class="file-upload-text">
+                <strong>Click to upload</strong> or drag and drop files here
+              </div>
+              <div class="file-upload-hint">
+                Supports: TXT, DOCX, XLSX, PDF, CSV, PNG, JPG, WAV, MP4
+              </div>
               <input
-                class="form-control"
                 type="file"
                 id="files"
                 name="file"
                 multiple
                 accept=".txt,.docx,.xlsx,.pdf,.csv,.png,.jpg,.jpeg,.wav,.mp4"
+                style="
+                  position: absolute;
+                  opacity: 0;
+                  width: 100%;
+                  height: 100%;
+                  cursor: pointer;
+                "
               />
             </div>
 
-            <button type="submit" class="btn btn-primary w-100">
-              <i class="bi bi-upload me-1"></i> Upload
-            </button>
-          </form>
+            <form id="upload-form" class="mt-3">
+              <button type="submit" class="btn-primary-modern w-100">
+                <i class="bi bi-upload me-2"></i>
+                Upload Files
+              </button>
+            </form>
 
-          <!-- Status messages -->
-          <div id="upload-status"></div>
-
-          <!-- Search button -->
-          <div class="text-center mb-3">
-            <button id="search-btn" class="btn btn-success">
-              <i class="bi bi-search me-1"></i> Search Words
-            </button>
+            <!-- Status messages -->
+            <div id="upload-status" class="mt-3"></div>
           </div>
 
-          <!-- Files table -->
-          <div class="table-responsive">
-            <table class="table table-bordered align-middle mb-0">
-              <thead class="table-secondary">
-                <tr>
-                  <th style="width: 10%">#</th>
-                  <th>File Name</th>
-                  <th style="width: 20%">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="files-table-body">
-                <tr>
-                  <td colspan="3" class="text-center">Loading files...</td>
-                </tr>
-              </tbody>
-            </table>
+          <!-- Quick Actions -->
+          <div class="modern-card">
+            <div class="card-header-modern">
+              <h2 class="card-title">
+                <i class="bi bi-lightning"></i>
+                Quick Actions
+              </h2>
+            </div>
+
+            <div class="d-grid gap-2">
+              <button id="search-btn" class="btn-success-modern">
+                <i class="bi bi-search me-2"></i>
+                Search Words in Files
+              </button>
+              <button id="clear-all-btn" class="btn-secondary-modern">
+                <i class="bi bi-trash3 me-2"></i>
+                Clear All Files
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+
+        <!-- Files Section -->
+        <div class="col-12 col-lg-6 equal-height">
+          <div class="modern-card fade-in">
+            <div class="card-header-modern">
+              <h2 class="card-title">
+                <i class="bi bi-files"></i>
+                Uploaded Files
+                <span id="file-count-badge" class="badge bg-primary ms-2"
+                  >0</span
+                >
+              </h2>
+            </div>
+
+            <!-- Files table -->
+            <div class="table-responsive">
+              <table class="table-modern w-100">
+                <thead>
+                  <tr>
+                    <th style="width: 10%">#</th>
+                    <th>File Name</th>
+                    <th style="width: 100px">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="files-table-body">
+                  <tr>
+                    <td colspan="3" class="text-center">
+                      <div class="no-results">
+                        <div class="no-results-icon">
+                          <i class="bi bi-file-earmark"></i>
+                        </div>
+                        <div>Loading files...</div>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
 
-    <!-- Bootstrap 5 bundle -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    
+
     <!-- Import modular components -->
+    <script src="src/renderer/themeManager.js"></script>
     <script src="src/renderer/apiClient.js"></script>
     <script src="src/renderer/fileManager.js"></script>
 
     <script>
       $(document).ready(function () {
+        // Add fade-in animation to elements
+        setTimeout(() => {
+          $(".fade-in").addClass("animate__fadeIn");
+        }, 100);
+
         // Initialize API client
         const apiClient = new APIClient();
-        
+
         // Initialize file manager
         const fileManager = new FileManager(apiClient);
         fileManager.init();
+
+        // Add some modern interactions
+        $(".modern-card").hover(
+          function () {
+            $(this).addClass("shadow-lg");
+          },
+          function () {
+            $(this).removeClass("shadow-lg");
+          }
+        );
       });
     </script>
   </body>

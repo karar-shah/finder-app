@@ -7,6 +7,12 @@ class SearchManager {
     this.searchResults = $("#search-results");
     this.resultsTable = $("#results-table-container");
     this.resultsTableBody = $("#results-table-body");
+    this.searchLoading = $("#search-loading");
+    this.noResults = $("#no-results");
+    this.searchStats = $("#search-stats");
+    this.totalMatches = $("#total-matches");
+    this.filesFound = $("#files-found");
+    this.resultsCountBadge = $("#results-count-badge");
   }
 
   /**
@@ -26,36 +32,50 @@ class SearchManager {
     });
 
     // Handle search form submission
-    $("form").on("submit", (e) => {
+    $("#search-form").on("submit", (e) => {
       e.preventDefault();
       this.handleSearch();
     });
+
+    // Handle radio button changes
+    $('input[name="search_type"]').on("change", () => {
+      this.updateSearchPlaceholder();
+    });
+
+    this.updateSearchPlaceholder();
+  }
+
+  /**
+   * Update search placeholder based on search type
+   */
+  updateSearchPlaceholder() {
+    const searchType = $('input[name="search_type"]:checked').val();
+    const placeholder =
+      searchType === "contains"
+        ? "Enter text to find within words..."
+        : "Enter exact word to find...";
+    $("#wordsearch").attr("placeholder", placeholder);
   }
 
   /**
    * Handle search form submission
    */
   async handleSearch() {
-    const searchWord = $("input[name='wordsearch']").val().trim();
+    const searchWord = $("#wordsearch").val().trim();
 
     if (!searchWord) {
-      this.showSearchMessage("Please enter a word to search for", "warning");
+      this.showNoResults("Please enter a word to search for");
       return;
     }
 
     // Show loading state
-    this.showSearchMessage(
-      `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Searching for "${searchWord}"...`,
-      "info"
-    );
+    this.showLoadingState(searchWord);
 
     // Disable search button during search
     const submitBtn = $('button[type="submit"]');
     submitBtn
       .prop("disabled", true)
-      .html(
-        '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Searching...'
-      );
+      .html('<div class="loading-spinner"></div>Searching...');
 
     const searchType = $('input[name="search_type"]:checked').val() || "exact";
 
@@ -73,8 +93,31 @@ class SearchManager {
     } finally {
       submitBtn
         .prop("disabled", false)
-        .html('<i class="bi bi-search"></i> Search');
+        .html('<i class="bi bi-search me-1"></i>Search');
     }
+  }
+
+  /**
+   * Show loading state
+   */
+  showLoadingState(searchWord) {
+    this.hideAllStates();
+    this.searchLoading.removeClass("d-none");
+    this.searchLoading
+      .find("p")
+      .text(`Searching for "${searchWord}" in your files...`);
+  }
+
+  /**
+   * Hide all result states
+   */
+  hideAllStates() {
+    this.searchResults.addClass("d-none");
+    this.resultsTable.addClass("d-none");
+    this.searchLoading.addClass("d-none");
+    this.noResults.addClass("d-none");
+    this.searchStats.addClass("d-none");
+    this.resultsCountBadge.addClass("d-none");
   }
 
   /**
@@ -85,7 +128,7 @@ class SearchManager {
 
     if (!response.results || !Array.isArray(response.results)) {
       console.error("Invalid response format:", response);
-      this.showSearchMessage("Invalid response from server", "danger");
+      this.showNoResults("Invalid response from server");
       return;
     }
 
@@ -97,27 +140,24 @@ class SearchManager {
           ? `containing "${searchWord}"`
           : `matching "${searchWord}" exactly`;
 
-      this.showSearchMessage(`No words found ${searchTypeText}`, "warning");
-      this.resultsTable.addClass("d-none");
+      this.showNoResults(`No words found ${searchTypeText}`);
       return;
     }
 
     // Process matches to get unique filenames
     const fileResults = this.processSearchResults(matches, searchWord);
 
-    // Show search message with search type context
-    const searchTypeText =
-      searchType === "contains"
-        ? `containing "${searchWord}"`
-        : `matching "${searchWord}" exactly`;
+    // Show results
+    this.displaySearchResults(fileResults, matches.length);
+  }
 
-    this.showSearchMessage(
-      `Found words ${searchTypeText} in ${fileResults.size} file(s)`,
-      "success"
-    );
-
-    // Populate results table
-    this.displaySearchResults(fileResults);
+  /**
+   * Show no results state
+   */
+  showNoResults(message) {
+    this.hideAllStates();
+    this.noResults.removeClass("d-none");
+    this.noResults.find("p").text(message);
   }
 
   /**
@@ -150,29 +190,57 @@ class SearchManager {
   /**
    * Display search results in table
    */
-  displaySearchResults(fileResults) {
+  displaySearchResults(fileResults, totalMatches) {
+    this.hideAllStates();
+
     this.resultsTableBody.empty();
     this.resultsTable.removeClass("d-none");
 
+    // Update statistics
+    this.updateSearchStats(totalMatches, fileResults.size);
+
+    let rowIndex = 1;
     fileResults.forEach((result, fileName) => {
       const shortName =
-        fileName.length > 40 ? fileName.substring(0, 37) + "..." : fileName;
-
-      const occurrenceText =
-        result.count > 1
-          ? `${result.count} occurrences`
-          : `${result.count} occurrence`;
+        fileName.length > 35 ? fileName.substring(0, 32) + "..." : fileName;
 
       const row = `
-        <tr>
-          <td>${result.word}</td>
+        <tr class="slide-up">
+          <td>
+            <div class="d-flex align-items-center">
+              <span class="badge bg-primary me-2">${result.word}</span>
+              ${
+                result.exact
+                  ? '<i class="bi bi-check-circle text-success" title="Exact match"></i>'
+                  : '<i class="bi bi-search text-info" title="Contains match"></i>'
+              }
+            </div>
+          </td>
           <td title="${fileName}">
-            <span class="fw-medium">${shortName}</span>
-            <span class="badge bg-secondary ms-2">${occurrenceText}</span>
+            <div class="d-flex align-items-center justify-content-between">
+              <div>
+                <i class="bi bi-file-earmark-text text-primary me-2"></i>
+                <span class="fw-medium">${shortName}</span>
+              </div>
+            </div>
+          </td>
+          <td>
+            <span class="badge bg-success">${result.count}</span>
           </td>
         </tr>`;
       this.resultsTableBody.append(row);
+      rowIndex++;
     });
+  }
+
+  /**
+   * Update search statistics
+   */
+  updateSearchStats(totalMatches, filesFound) {
+    this.totalMatches.text(totalMatches);
+    this.filesFound.text(filesFound);
+    this.resultsCountBadge.text(totalMatches).removeClass("d-none");
+    this.searchStats.removeClass("d-none");
   }
 
   /**
@@ -181,20 +249,20 @@ class SearchManager {
   handleSearchError(error) {
     console.error("Search failed:", error);
 
-    let errorMessage = "Error while searching. ";
+    let errorMessage = "Error while searching";
 
     if (error.status === 0) {
-      errorMessage +=
+      errorMessage =
         "Cannot connect to server. Check if the backend is running.";
     } else if (error.status === 404) {
-      errorMessage += "Search endpoint not found.";
+      errorMessage = "Search endpoint not found.";
     } else if (error.status === 500) {
-      errorMessage += "Server error occurred.";
+      errorMessage = "Server error occurred during search.";
     } else {
-      errorMessage += `Server returned status ${error.status || "unknown"}.`;
+      errorMessage = `Server returned status ${error.status || "unknown"}.`;
     }
 
-    this.showSearchMessage(errorMessage, "danger");
+    this.showNoResults(errorMessage);
   }
 
   /**
@@ -207,37 +275,6 @@ class SearchManager {
       window.location.href = "index.html";
     } else {
       window.open("index.html", "_self");
-    }
-  }
-
-  /**
-   * Helper function to show search messages
-   */
-  showSearchMessage(message, type) {
-    this.searchResults.html(`
-      <div class="alert alert-${type}" role="alert">
-        ${
-          type === "info"
-            ? message
-            : `<i class="bi bi-${this.getAlertIcon(type)} me-2"></i>${message}`
-        }
-      </div>
-    `);
-  }
-
-  /**
-   * Helper to get the appropriate Bootstrap icon for alert type
-   */
-  getAlertIcon(type) {
-    switch (type) {
-      case "success":
-        return "check-circle";
-      case "danger":
-        return "exclamation-triangle";
-      case "warning":
-        return "exclamation-circle";
-      default:
-        return "info-circle";
     }
   }
 }
