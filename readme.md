@@ -8,14 +8,19 @@ A cross-platform desktop application for extracting and searching text from mult
   - Text files (`.txt`)
   - Word documents (`.docx`)
   - Excel spreadsheets (`.xlsx`)
-  - Images (`.png`, `.jpg`)
+  - PDF documents (`.pdf`)
+  - CSV files (`.csv`)
+  - Images (`.png`, `.jpg`, `.jpeg`)
   - Audio files (`.wav`)
   - Video files (`.mp4`)
 - Extract text content from files using:
   - Direct text extraction
   - OCR (Optical Character Recognition) for images
   - Speech recognition for audio and video
-- Search for specific words across all processed files
+- Search for words across all processed files:
+  - Exact match search (case-insensitive)
+  - Contains search (finds partial matches)
+- Cross-platform compatibility (Windows, macOS, Linux)
 - Clean user interface with upload and search screens
 
 ## Project Structure
@@ -67,14 +72,26 @@ cd backend
 pip install -r requirements.txt
 ```
 
-3. Run migrations:
+3. Ensure Tesseract OCR is installed for image processing:
+
+- **Windows**: Download and install from [Tesseract at UB Mannheim](https://github.com/UB-Mannheim/tesseract/wiki)
+- **macOS**: `brew install tesseract`
+- **Linux**: `sudo apt install tesseract-ocr`
+
+4. Run migrations:
 
 ```bash
 python manage.py makemigrations
 python manage.py migrate
 ```
 
-4. Start the development server:
+5. Create media directories:
+
+```bash
+mkdir -p media/media
+```
+
+6. Start the development server:
 
 ```bash
 python manage.py runserver
@@ -111,14 +128,23 @@ npm run dist:win
 npm run dist:linux
 ```
 
+## API Endpoints
+
+- `POST /file/` - Upload files for processing
+- `GET /filetbl/` - Get all extracted words
+- `DELETE /filetbl/{id}` - Delete a specific word
+- `POST /api/search/` - Search for words with options:
+  - `wordsearch`: The word to search for
+  - `search_type`: Either "exact" or "contains"
+
 ## Dependencies
 
 ### Backend (Python)
 
-- Django
-- Django REST Framework
+- Django & Django REST Framework
 - python-docx (Word processing)
 - openpyxl (Excel processing)
+- PyPDF2 (PDF processing)
 - SpeechRecognition (Audio processing)
 - pytesseract (OCR for images)
 - Pillow (Image processing)
@@ -126,9 +152,15 @@ npm run dist:linux
 
 ### Frontend (JavaScript)
 
-- Electron
-- Bootstrap 5 (UI)
+- Electron (Desktop app framework)
+- Bootstrap 5 (UI components)
 - jQuery (AJAX requests)
+
+## Troubleshooting
+
+- **Tesseract OCR errors**: Ensure Tesseract is properly installed and available in your system PATH
+- **File upload issues**: Check the media directory permissions
+- **Speech recognition failures**: Ensure you have an active internet connection for Google's speech API
 
 ## Notes
 

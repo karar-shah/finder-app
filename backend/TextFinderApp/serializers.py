@@ -11,6 +11,10 @@ class FileWordsSerializers(serializers.ModelSerializer):
         source='file_id.file',         # dot‑path here is allowed in `source`
         read_only=True
     )
+    original_filename = serializers.CharField(
+        source='file_id.original_filename',
+        read_only=True
+    )
     class Meta:
         model = FileWords
-        fields = ['id','word','file']
+        fields = ['id','word','file','original_filename']

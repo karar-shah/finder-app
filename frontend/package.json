@@ -15,7 +15,8 @@
   "license": "ISC",
   "description": "Text Finder Application - Extract and search for words in multiple file types",
   "dependencies": {
-    "electron": "^37.5.1"
+    "electron": "^37.5.1",
+    "form-data": "^4.0.4"
   },
   "devDependencies": {
     "electron-builder": "^24.13.3"
