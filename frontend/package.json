@@ -16,7 +16,10 @@
   "description": "Text Finder Application - Extract and search for words in multiple file types",
   "dependencies": {
     "electron": "^37.5.1",
-    "form-data": "^4.0.4"
+    "form-data": "^4.0.4",
+    "jquery": "^3.7.1",
+    "jszip": "^3.10.1",
+    "bootstrap-icons": "^1.11.3"
   },
   "devDependencies": {
     "electron-builder": "^24.13.3"
