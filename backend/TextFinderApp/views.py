@@ -575,6 +575,7 @@ class tableView(APIView):
                 'msg': f'Error deleting data: {str(e)}',
                 'status': status.HTTP_500_INTERNAL_SERVER_ERROR
             })
+
 # def filetbl(request):
 #     store_words = FileWords.objects.all()
 #     return render(request, 'filetbl.html', {'store_words':store_words})

@@ -321,15 +321,15 @@ npm run dist:linux
 
 ### Backend
 
-- Python 3.8+
+- Python 3.12+
 - Django 5.0+
 - Tesseract OCR
 - Various Python packages (see requirements.txt)
 
 ### Frontend
 
-- Node.js 16+
-- Electron 25+
+- Node.js 22+
+- Electron 37+
 - Modern web browser APIs
 
 ## Troubleshooting

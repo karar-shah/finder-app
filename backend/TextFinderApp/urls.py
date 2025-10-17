@@ -1,3 +1,9 @@
+# urls.py
+# Application URL routes for TextFinderApp.
+# Routes include file upload endpoints, directory uploads, search API, and
+# endpoints to delete words or entire files. These are used by the frontend
+# and can also be exercised via curl/postman during development.
+
 from django.urls import path
 from . import views
 
