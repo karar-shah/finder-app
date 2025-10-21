@@ -14,24 +14,54 @@
     <div class="app-container">
       <!-- App Header -->
       <header class="app-header">
-        <div
-          class="container-fluid d-flex justify-content-between align-items-center"
-        >
-          <div>
-            <h1 class="app-title">
-              <div class="app-title-icon">
-                <i class="bi bi-search"></i>
+        <div class="container-fluid">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <h1 class="app-title">
+                <div class="app-title-icon">
+                  <i class="bi bi-search"></i>
+                </div>
+                Word Search
+              </h1>
+              <p class="app-subtitle">
+                Find words across all your uploaded files
+              </p>
+            </div>
+
+            <div class="d-flex align-items-center gap-3">
+              <!-- Theme Switcher -->
+              <div class="theme-switcher">
+                <label for="theme-select" class="theme-label">
+                  <i class="bi bi-palette"></i> Theme
+                </label>
+                <select id="theme-select" class="theme-select">
+                  <optgroup label="Light">
+                    <option value="default-light" selected>Purple</option>
+                    <option value="blue-light">Blue</option>
+                    <option value="green-light">Green</option>
+                    <option value="orange-light">Orange</option>
+                    <option value="pink-light">Pink</option>
+                  </optgroup>
+                  <optgroup label="Dark">
+                    <option value="default-dark">Purple</option>
+                    <option value="blue-dark">Blue</option>
+                    <option value="green-dark">Green</option>
+                    <option value="orange-dark">Orange</option>
+                    <option value="pink-dark">Pink</option>
+                  </optgroup>
+                </select>
               </div>
-              Word Search
-            </h1>
-            <p class="app-subtitle">
-              Find words across all your uploaded files
-            </p>
+
+              <button
+                id="upload-btn"
+                class="btn-secondary-modern"
+                style="margin-top: 1.5rem"
+              >
+                <i class="bi bi-arrow-left me-2"></i>
+                Back to Upload
+              </button>
+            </div>
           </div>
-          <button id="upload-btn" class="btn-secondary-modern">
-            <i class="bi bi-arrow-left me-2"></i>
-            Back to Upload
-          </button>
         </div>
       </header>
 

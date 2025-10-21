@@ -105,6 +105,7 @@ class APIClient {
               resolve({
                 buffer: Array.from(uint8Array), // Convert to regular array for IPC
                 name: file.name,
+                path: file.path || file.name, // Get full absolute path from Electron File object
                 size: file.size,
                 type: file.type,
               });
@@ -117,7 +118,7 @@ class APIClient {
 
       console.log(
         "Uploading via Electron:",
-        fileArray.map((f) => ({ name: f.name, size: f.size }))
+        fileArray.map((f) => ({ name: f.name, path: f.path, size: f.size }))
       );
 
       const response = await window.electronAPI.uploadFiles(

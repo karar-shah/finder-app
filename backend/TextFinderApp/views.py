@@ -60,9 +60,22 @@ def get_supported_extensions():
     """Return list of supported file extensions"""
     return ['txt', 'docx', 'xlsx', 'pdf', 'wav', 'mp4', 'png', 'jpg', 'jpeg', 'csv']
 
+def check_duplicate_file(original_filename):
+    """
+    Check if a file with the same original_filename already exists
+    Returns: (is_duplicate: bool, existing_file_id: int or None)
+    """
+    # Check for files with same original_filename (we store full path or filename here)
+    existing_file = UploadedFiles.objects.filter(original_filename=original_filename).first()
+
+    if existing_file:
+        return True, existing_file.id
+
+    return False, None
+
 def process_single_file(file_path, original_filename=None):
     """Process a single file and extract words"""
-    import PyPDF2
+    import fitz  # PyMuPDF
     
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
@@ -73,15 +86,40 @@ def process_single_file(file_path, original_filename=None):
     
     print(f"Processing file: {original_filename} (extension: {file_extension})")
     
+    # original_filename contains either the filename (for single uploads)
+    # or the relative path (for directory uploads). We'll store the
+    # full value in UploadedFiles.original_filename and use it for
+    # duplicate detection (path-only check as requested).
+    filename_only = os.path.basename(original_filename)
+    full_path = original_filename  # This is the relative path from directory root or simple filename
+
+    # Check for duplicate file based on original_filename only
+    is_duplicate, existing_id = check_duplicate_file(full_path)
+    
+    if is_duplicate:
+        print(f"Skipping duplicate file: {full_path}")
+        return {
+            'file': filename_only,
+            'status': 'skipped',
+            'message': 'Duplicate file (same path)',
+            'file_id': existing_id
+        }
+    
     # Create file record - we'll create a copy in media directory
     with open(file_path, 'rb') as source_file:
         file_content = source_file.read()
         
-    # Create a temporary file in the media directory
-    media_filename = f"{os.path.splitext(original_filename)[0]}_{hash(file_path) % 10000}{os.path.splitext(original_filename)[1]}"
+    # Create a unique filename using timestamp and hash to avoid collisions
+    import time
+    timestamp = int(time.time() * 1000)  # milliseconds
+    base_name = os.path.splitext(filename_only)[0]
+    extension = os.path.splitext(filename_only)[1]
+    media_filename = f"{base_name}_{timestamp}_{hash(full_path) % 100000}{extension}"
     
-    # Save to UploadedFiles
-    document = UploadedFiles(original_filename=original_filename)
+    # Save to UploadedFiles storing the full path/filename in original_filename
+    document = UploadedFiles(
+        original_filename=full_path
+    )
     document.file.save(media_filename, ContentFile(file_content), save=True)
     
     file_id = document.id
@@ -118,14 +156,30 @@ def process_single_file(file_path, original_filename=None):
             
         elif file_extension == 'pdf':
             text = ""
-            with open(saved_path, 'rb') as pdf_file:
-                pdf_reader = PyPDF2.PdfReader(pdf_file)
-                for page_num in range(len(pdf_reader.pages)):
-                    page = pdf_reader.pages[page_num]
-                    text += page.extract_text() or ""
+            try:
+                # Use PyMuPDF (fitz) for better text extraction
+                pdf_document = fitz.open(saved_path)
+                print(f"PDF has {pdf_document.page_count} pages")
+                
+                for page_num in range(pdf_document.page_count):
+                    page = pdf_document[page_num]
+                    page_text = page.get_text("text")  # Extract text with better accuracy
+                    if page_text:
+                        text += page_text + " "
+                    print(f"Page {page_num + 1}: Extracted {len(page_text.split())} words")
+                
+                pdf_document.close()
+                print(f"Total text length: {len(text)} characters")
+            except Exception as pdf_error:
+                print(f"Error extracting text from PDF: {pdf_error}")
+                raise
+            
+            # Split into words and preserve all occurrences
             data = text.split()
+            print(f"Total words extracted from PDF: {len(data)}")
             for id, word in enumerate(data):
-                word_dict[word] = id + 1
+                if word.strip():  # Only process non-empty words
+                    word_dict[word] = id + 1
                 
         elif file_extension == 'wav':
             recognizer = sr.Recognizer()
@@ -161,7 +215,7 @@ def process_single_file(file_path, original_filename=None):
         elif file_extension in ['png', 'jpg', 'jpeg']:
             # Set Tesseract command based on OS
             if os.name == 'nt':  # Windows
-                pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+                pytesseract.pytesseract.tesseract_cmd = r"D:\Tesseract-OCR\tesseract.exe"
             img = Image.open(saved_path)
             text = pytesseract.image_to_string(img)
             data = text.split()
@@ -182,15 +236,21 @@ def process_single_file(file_path, original_filename=None):
         else:
             raise ValueError(f"Unsupported file type: {file_extension}")
             
-        # Save words to database
+        # Save ALL words to database (including duplicates)
+        # Use word_dict to track unique words for reporting, but save all occurrences
+        saved_word_count = 0
         for word in word_dict.keys():
             if word.strip():  # Only save non-empty words
                 word_record = FileWords(word=word, file_id_id=file_id)
                 word_record.save()
+                saved_word_count += 1
+        
+        print(f"Saved {saved_word_count} unique words out of {len(data) if 'data' in locals() else 0} total words")
                 
         return {
             'file': original_filename, 
             'words': len(word_dict),
+            'total_words': len(data) if 'data' in locals() else len(word_dict),
             'file_id': file_id,
             'status': 'success'
         }
@@ -240,6 +300,7 @@ def upload_directory(request):
             
             # Process all supported files recursively
             processed_files = 0
+            skipped_files = 0
             for root, dirs, files in os.walk(temp_dir):
                 for file in files:
                     if file.endswith('.zip'):  # Skip the original zip file
@@ -257,7 +318,11 @@ def upload_directory(request):
                             
                             result = process_single_file(file_path, relative_path)
                             results.append(result)
-                            processed_files += 1
+                            
+                            if result.get('status') == 'skipped':
+                                skipped_files += 1
+                            else:
+                                processed_files += 1
                             
                         except Exception as e:
                             print(f"Error processing file {file}: {str(e)}")
@@ -267,16 +332,20 @@ def upload_directory(request):
                                 'status': 'error'
                             })
             
-            if processed_files == 0:
+            if processed_files == 0 and skipped_files == 0:
                 return JsonResponse({
                     'status': 'warning', 
                     'message': 'No supported files found in the directory',
                     'results': results
                 }, status=200)
             
+            message = f'Successfully processed {processed_files} files'
+            if skipped_files > 0:
+                message += f', skipped {skipped_files} duplicate files'
+            
             return JsonResponse({
                 'status': 'success',
-                'message': f'Successfully processed {processed_files} files',
+                'message': message,
                 'results': results
             })
             
@@ -299,20 +368,45 @@ def upload_directory(request):
 
 @csrf_exempt
 def file(request):
-    import PyPDF2
+    import fitz  # PyMuPDF
+    
     if request.method == "POST":
         file2 = request.FILES.getlist("file")
         print("Selected Files: ", file2)
         results = []
+        skipped_count = 0
+        
         for i in range(len(file2)):
             file_name = str(file2[i])
             file_extension = os.path.splitext(file_name)[1].lower().lstrip('.')
             print(f"File extension: {file_extension}")
+            
+            # Get the full absolute path from the request POST data (sent by Electron)
+            file_path_key = f'file_path_{i}'
+            absolute_path = request.POST.get(file_path_key, file_name)
+            print(f"Absolute path: {absolute_path}")
+            
+            # Check for duplicate based on absolute path
+            is_duplicate, existing_id = check_duplicate_file(absolute_path)
+            
+            if is_duplicate:
+                print(f"Skipping duplicate file: {absolute_path}")
+                results.append({
+                    'file': file_name,
+                    'status': 'skipped',
+                    'message': 'Duplicate file'
+                })
+                skipped_count += 1
+                continue
+            
             try:
                 if file_extension == 'txt':
                     file_name = file2[i]
-                    original_name = file_name.name  # Store original filename
-                    documant1 = UploadedFiles(file=file_name, original_filename=original_name)
+                    original_name = absolute_path  # Store full absolute path
+                    documant1 = UploadedFiles(
+                        file=file_name,
+                        original_filename=original_name
+                    )
                     documant1.save()
                     fileId = documant1.id
                     print('updated: ',documant1.id)
@@ -333,8 +427,11 @@ def file(request):
                     results.append({'file': original_name, 'words': len(dict)})
                 elif file_extension == 'docx':
                     file_name = file2[i]
-                    original_name = file_name.name  # Store original filename
-                    documant1 = UploadedFiles(file=file_name, original_filename=original_name)
+                    original_name = absolute_path  # Store full absolute path
+                    documant1 = UploadedFiles(
+                        file=file_name,
+                        original_filename=original_name
+                    )
                     documant1.save()
                     fileId = documant1.id
                     print('updated: ', documant1.id)
@@ -356,8 +453,11 @@ def file(request):
                     results.append({'file': original_name, 'words': len(word_dict)})
                 elif file_extension == 'xlsx':
                     file_name = file2[i]
-                    original_name = file_name.name  # Store original filename
-                    documant1 = UploadedFiles(file=file_name, original_filename=original_name)
+                    original_name = absolute_path  # Store full absolute path
+                    documant1 = UploadedFiles(
+                        file=file_name,
+                        original_filename=original_name
+                    )
                     documant1.save()
                     fileId = documant1.id
                     print('updated: ', documant1.id)
@@ -383,8 +483,11 @@ def file(request):
                     results.append({'file': file_name.name, 'words': len(word_dict)})
                 elif file_extension == 'pdf':
                     file_name = file2[i]
-                    original_name = file_name.name  # Store original filename
-                    documant1 = UploadedFiles(file=file_name, original_filename=original_name)
+                    original_name = absolute_path  # Store full absolute path
+                    documant1 = UploadedFiles(
+                        file=file_name,
+                        original_filename=original_name
+                    )
                     documant1.save()
                     fileId = documant1.id
                     print('updated: ', documant1.id)
@@ -393,15 +496,30 @@ def file(request):
                     path = documant1.file.path
                     print("Path from setting: ", path)
                     text = ""
-                    with open(path, 'rb') as pdf_file:
-                        pdf_reader = PyPDF2.PdfReader(pdf_file)
-                        for page_num in range(len(pdf_reader.pages)):
-                            page = pdf_reader.pages[page_num]
-                            text += page.extract_text() or ""
+                    try:
+                        # Use PyMuPDF (fitz) for better text extraction
+                        pdf_document = fitz.open(path)
+                        print(f"PDF has {pdf_document.page_count} pages")
+                        
+                        for page_num in range(pdf_document.page_count):
+                            page = pdf_document[page_num]
+                            page_text = page.get_text("text")  # Extract text with better accuracy
+                            if page_text:
+                                text += page_text + " "
+                            print(f"Page {page_num + 1}: Extracted {len(page_text.split())} words")
+                        
+                        pdf_document.close()
+                        print(f"Total text length: {len(text)} characters")
+                    except Exception as pdf_error:
+                        print(f"Error extracting text from PDF: {pdf_error}")
+                        raise
+                    
                     data = text.split()
+                    print(f"Total words extracted from PDF: {len(data)}")
                     word_dict = {}
                     for id, word in enumerate(data):
-                        word_dict[word] = id + 1
+                        if word.strip():  # Only process non-empty words
+                            word_dict[word] = id + 1
                     for word in word_dict.items():
                         print(f"Word: {word[0]} | file: {fileId}")
                         documant = FileWords(word=word[0], file_id_id=fileId)
@@ -409,7 +527,11 @@ def file(request):
                     results.append({'file': file_name.name, 'words': len(word_dict)})
                 elif file_extension == 'wav':
                     file_name = file2[i]
-                    documant1 = UploadedFiles(file=file_name)
+                    original_name = absolute_path  # Store full absolute path
+                    documant1 = UploadedFiles(
+                        file=file_name,
+                        original_filename=original_name
+                    )
                     documant1.save()
                     fileId = documant1.id
                     print('updated: ', documant1.id)
@@ -438,7 +560,11 @@ def file(request):
                 elif file_extension == 'mp4':
                     print("Processing video file...")
                     file_name = file2[i]
-                    documant1 = UploadedFiles(file=file_name)
+                    original_name = absolute_path  # Store full absolute path
+                    documant1 = UploadedFiles(
+                        file=file_name,
+                        original_filename=original_name
+                    )
                     documant1.save()
                     fileId = documant1.id
                     print('updated: ', documant1.id)
@@ -466,13 +592,17 @@ def file(request):
                         results.append({'file': file_name.name, 'words': len(word_dict)})
                 elif file_extension == 'png' or file_extension == 'jpg' or file_extension == 'jpeg':
                     file_name = file2[i]
-                    documant1 = UploadedFiles(file=file_name)
+                    original_name = absolute_path  # Store full absolute path
+                    documant1 = UploadedFiles(
+                        file=file_name,
+                        original_filename=original_name
+                    )
                     documant1.save()
                     fileId = documant1.id
                     print('updated: ', documant1.id)
                     # Set Tesseract command based on OS
                     if os.name == 'nt':  # Windows
-                        pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+                        pytesseract.pytesseract.tesseract_cmd = r"D:\Tesseract-OCR\tesseract.exe"
                     # For macOS and Linux, assuming Tesseract is in PATH
                     # Use the actual saved file path, not the original name
                     image_path = documant1.file.path
@@ -491,7 +621,11 @@ def file(request):
                 elif file_extension == 'csv':
                     import csv
                     file_name = file2[i]
-                    documant1 = UploadedFiles(file=file_name)
+                    original_name = absolute_path  # Store full absolute path
+                    documant1 = UploadedFiles(
+                        file=file_name,
+                        original_filename=original_name
+                    )
                     documant1.save()
                     fileId = documant1.id
                     print('updated: ', documant1.id)
@@ -519,10 +653,21 @@ def file(request):
             except Exception as e:
                 print(f"Error processing file {file_name}: {str(e)}")
                 results.append({'file': str(file_name), 'error': str(e)})
+        
         if not results:
             return JsonResponse({'status': 'error', 'message': 'No files were processed successfully'}, status=400)
         
-        return JsonResponse({'status': 'success', 'results': results})
+        # Prepare response message
+        success_count = len([r for r in results if 'error' not in r and r.get('status') != 'skipped'])
+        message = f'Successfully processed {success_count} files'
+        if skipped_count > 0:
+            message += f', skipped {skipped_count} duplicate files'
+        
+        return JsonResponse({
+            'status': 'success', 
+            'message': message,
+            'results': results
+        })
     return render(request, "file.html")
 
 @method_decorator(csrf_exempt, name='dispatch')

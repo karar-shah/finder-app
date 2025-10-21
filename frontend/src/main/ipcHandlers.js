@@ -113,7 +113,7 @@ class IPCHandlers {
 
       console.log(
         "Uploading files:",
-        files.map((f) => ({ name: f.name, size: f.size }))
+        files.map((f) => ({ name: f.name, path: f.path, size: f.size }))
       );
 
       files.forEach((file, index) => {
@@ -121,6 +121,8 @@ class IPCHandlers {
           // Convert array back to Buffer
           const buffer = Buffer.from(file.buffer);
           form.append("file", buffer, file.name);
+          // Send the full absolute path as a separate field
+          form.append(`file_path_${index}`, file.path || file.name);
         } else {
           reject({
             error: `File buffer missing or invalid for: ${file.name}`,

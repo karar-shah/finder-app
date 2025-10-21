@@ -6,6 +6,8 @@ class FileManager {
     this.apiClient = apiClient;
     this.uploadStatus = $("#upload-status");
     this.filesTableBody = $("#files-table-body");
+    this.progressPollingInterval = null;
+    this.lastFileCount = 0;
   }
 
   /**
@@ -274,20 +276,61 @@ class FileManager {
       return;
     }
 
-    // Show uploading status
-    this.showStatus(
-      '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Uploading files...',
-      "info"
-    );
+    const fileCount = files.length;
+
+    // Remove "No files uploaded yet" message if it exists
+    this.clearNoFilesMessage();
+
+    // Show uploading status with file count (won't auto-hide)
+    if (fileCount === 1) {
+      this.showStatus(
+        `<span class="spinner-border spinner-border-sm me-2" role="status"></span>Processing ${files[0].name}...`,
+        "info",
+        false
+      );
+    } else {
+      this.showStatus(
+        `<span class="spinner-border spinner-border-sm me-2" role="status"></span>Processing 0/${fileCount} files...`,
+        "info",
+        false
+      );
+    }
+
+    // Start progressive polling to show files as they're processed
+    this.startProgressivePolling(fileCount);
 
     try {
       const response = await this.apiClient.uploadFiles(files);
 
+      // Stop polling
+      this.stopProgressivePolling();
+
       if (response.success) {
-        this.showStatus("Files uploaded successfully!", "success");
+        // Final update of file list
+        await this.loadUploadedFiles();
+
         $("#files").val(""); // Clear file input
         this.resetUploadDisplay();
-        this.loadUploadedFiles(); // Refresh file list
+
+        // Now show success message with results
+        const results = response.data?.results || [];
+        const successCount = results.filter(
+          (r) => !r.error && r.status !== "skipped"
+        ).length;
+        const skippedCount = results.filter(
+          (r) => r.status === "skipped"
+        ).length;
+
+        let message = `Successfully processed ${successCount} file${
+          successCount !== 1 ? "s" : ""
+        }`;
+        if (skippedCount > 0) {
+          message += `, skipped ${skippedCount} duplicate${
+            skippedCount !== 1 ? "s" : ""
+          }`;
+        }
+
+        this.showStatus(message, "success");
       } else {
         throw new Error(
           `Upload failed with status ${response.status}: ${
@@ -296,11 +339,12 @@ class FileManager {
         );
       }
     } catch (error) {
+      // Stop polling on error
+      this.stopProgressivePolling();
       console.error("Upload failed:", error);
       this.handleUploadError(error);
     }
   }
-
   /**
    * Handle directory upload
    */
@@ -313,28 +357,62 @@ class FileManager {
       return;
     }
 
-    // Show uploading status
+    const totalFiles = files.length;
+
+    // Remove "No files uploaded yet" message if it exists
+    this.clearNoFilesMessage();
+
+    // Show initial processing status (won't auto-hide)
     this.showStatus(
-      '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Processing directory...',
-      "info"
+      `<span class="spinner-border spinner-border-sm me-2" role="status"></span>Processing directory (${totalFiles} files found)...`,
+      "info",
+      false
     );
+
+    // Start progressive polling to show files as they're processed
+    this.startProgressivePolling(totalFiles);
 
     try {
       const response = await this.apiClient.uploadDirectory(files);
 
-      if (response.success) {
-        const message =
-          response.data?.message || "Directory processed successfully!";
-        this.showStatus(message, "success");
+      // Stop polling
+      this.stopProgressivePolling();
 
-        // Show detailed results if available
-        if (response.data?.results && response.data.results.length > 0) {
-          this.showDetailedResults(response.data.results);
-        }
+      if (response.success) {
+        const results = response.data?.results || [];
+        const successCount = results.filter(
+          (r) => r.status === "success"
+        ).length;
+        const skippedCount = results.filter(
+          (r) => r.status === "skipped"
+        ).length;
+        const errorCount = results.filter((r) => r.status === "error").length;
+
+        // Final update of file list
+        await this.loadUploadedFiles();
 
         $("#directory").val(""); // Clear directory input
         this.resetUploadDisplay();
-        this.loadUploadedFiles(); // Refresh file list
+
+        // Now show detailed success message
+        let message = `Successfully processed ${successCount} file${
+          successCount !== 1 ? "s" : ""
+        }`;
+        if (skippedCount > 0) {
+          message += `, skipped ${skippedCount} duplicate${
+            skippedCount !== 1 ? "s" : ""
+          }`;
+        }
+        if (errorCount > 0) {
+          message += `, ${errorCount} error${errorCount !== 1 ? "s" : ""}`;
+        }
+
+        this.showStatus(message, successCount > 0 ? "success" : "warning");
+
+        // Show detailed results if available
+        if (results.length > 0) {
+          this.showDetailedResults(results);
+        }
       } else {
         throw new Error(
           `Directory upload failed with status ${response.status}: ${
@@ -343,11 +421,12 @@ class FileManager {
         );
       }
     } catch (error) {
+      // Stop polling on error
+      this.stopProgressivePolling();
       console.error("Directory upload failed:", error);
       this.handleUploadError(error);
     }
   }
-
   /**
    * Show detailed results from directory processing
    */
@@ -441,7 +520,11 @@ class FileManager {
     data.forEach((item) => {
       if (item.file && item.file_id) {
         const filePath = item.file;
-        const fileName = item.original_filename || filePath.split("/").pop();
+        // `original_filename` contains the full path or filename as stored by backend
+        const originalPath =
+          item.original_filename || filePath.split("/").pop();
+        // Extract just the filename from the full path for display
+        const fileName = originalPath.split("/").pop();
         const fileId = item.file_id;
 
         if (!fileMap.has(fileId)) {
@@ -451,6 +534,7 @@ class FileManager {
             fileName: fileName,
             wordCount: 1,
             original_name: item.original_filename,
+            original_path: originalPath,
           });
         } else {
           fileMap.get(fileId).wordCount += 1;
@@ -488,17 +572,27 @@ class FileManager {
     let index = 1;
     fileMap.forEach((fileData, fileId) => {
       const fileName = fileData.fileName;
+      const originalPath = fileData.original_path;
       const shortName =
         fileName.length > 35 ? fileName.substring(0, 32) + "..." : fileName;
+
+      // Use the same purple file icon for both single and directory uploads
+      const iconClass = "bi-file-earmark-text text-primary";
 
       const row = `
         <tr data-filename="${fileName}" data-file-id="${fileId}" class="slide-up">
           <td><span class="badge bg-primary">${index}</span></td>
-          <td title="${fileName}">
+          <td>
             <div class="d-flex align-items-center">
-              <i class="bi bi-file-earmark-text text-primary me-2"></i>
+              <span class="file-path-icon" data-path="${this.escapeHtml(
+                originalPath
+              )}">
+                <i class="bi ${iconClass} me-2"></i>
+              </span>
               <span>${shortName}</span>
-              <small class="text-muted ms-2">(${fileData.wordCount} words)</small>
+              <small class="text-muted ms-2">(${
+                fileData.wordCount
+              } words)</small>
             </div>
           </td>
           <td>
@@ -510,6 +604,9 @@ class FileManager {
       this.filesTableBody.append(row);
       index++;
     });
+
+    // Initialize custom tooltips for file path icons
+    this.initializePathTooltips();
 
     // Add click handlers for delete buttons
     $(".delete-file")
@@ -544,7 +641,7 @@ class FileManager {
   async deleteFile(fileId, row) {
     const fileName = row.data("filename");
 
-    this.showStatus(`Deleting ${fileName}...`, "info");
+    this.showStatus(`Deleting ${fileName}...`, "info", false); // Don't auto-hide
 
     try {
       const response = await this.apiClient.deleteFile(fileId);
@@ -613,12 +710,23 @@ class FileManager {
       return;
     }
 
-    this.showStatus("Clearing all files...", "info");
+    this.showStatus("Clearing all files...", "info", false); // Don't auto-hide
 
     try {
       const response = await this.apiClient.clearAllFiles();
 
       if (response.success) {
+        // Keep processing message while loading file list
+        this.showStatus(
+          '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Updating file list...',
+          "info",
+          false
+        );
+
+        // Wait for file list to load before showing success
+        await this.loadUploadedFiles();
+
+        // Now show success message
         const message =
           response.data?.message || "All files cleared successfully";
         this.showStatus(message, "success");
@@ -630,9 +738,6 @@ class FileManager {
         ) {
           console.log("Deleted files:", response.data.deleted_files);
         }
-
-        // Refresh the file list
-        this.loadUploadedFiles();
       } else {
         throw new Error(response.data?.message || "Clear all failed");
       }
@@ -644,20 +749,264 @@ class FileManager {
 
   /**
    * Helper function to show status messages
+   * @param {string} message - The message to display
+   * @param {string} type - Type of message: 'success', 'info', 'warning', 'danger'
+   * @param {boolean} autoHide - Whether to auto-hide the message after 5 seconds (default: true)
    */
-  showStatus(message, type) {
+  showStatus(message, type, autoHide = true) {
     const statusClass = `status-${type}`;
     this.uploadStatus.html(`
-      <div class="status-message ${statusClass} fade-in">
+      <div class="status-message ${statusClass}">
         ${message}
-        <button type="button" class="btn-close" onclick="this.parentElement.remove()" aria-label="Close" style="float: right; background: none; border: none; font-size: 1.2rem; cursor: pointer;">&times;</button>
       </div>
     `);
+    this.uploadStatus.show();
 
-    // Auto-dismiss all notifications after 5 seconds
-    setTimeout(() => {
-      this.uploadStatus.find(".status-message").fadeOut();
-    }, 5000);
+    // Auto-hide success/info messages after 5 seconds only if autoHide is true
+    if (autoHide && (type === "success" || type === "info")) {
+      setTimeout(() => {
+        this.uploadStatus.fadeOut();
+      }, 5000);
+    }
+  }
+
+  /**
+   * Initialize custom tooltips for file path icons
+   */
+  initializePathTooltips() {
+    $(".file-path-icon").on("mouseenter", function (e) {
+      const path = $(this).data("path");
+      const tooltip = $(`
+        <div class="custom-tooltip">
+          <div class="custom-tooltip-arrow"></div>
+          <div class="custom-tooltip-inner">${path}</div>
+        </div>
+      `);
+
+      $("body").append(tooltip);
+
+      const iconRect = this.getBoundingClientRect();
+      const tooltipWidth = tooltip.outerWidth();
+      const tooltipHeight = tooltip.outerHeight();
+
+      // Position tooltip above the icon
+      const left = iconRect.left + iconRect.width / 2 - tooltipWidth / 2;
+      const top = iconRect.top - tooltipHeight - 8;
+
+      tooltip.css({
+        left: `${left}px`,
+        top: `${top}px`,
+        opacity: 0,
+      });
+
+      // Fade in
+      setTimeout(() => {
+        tooltip.css({ opacity: 1 });
+      }, 10);
+    });
+
+    $(".file-path-icon").on("mouseleave", function () {
+      $(".custom-tooltip").remove();
+    });
+  }
+
+  /**
+   * Start progressive file list polling during upload
+   */
+  startProgressivePolling(expectedCount) {
+    this.lastFileCount = this.filesTableBody.find("tr[data-file-id]").length;
+    let processedCount = 0;
+
+    this.progressPollingInterval = setInterval(async () => {
+      try {
+        // Check for new files without rebuilding the entire table
+        const newFilesAdded = await this.checkAndAddNewFiles();
+
+        if (newFilesAdded > 0) {
+          processedCount += newFilesAdded;
+          this.lastFileCount += newFilesAdded;
+
+          // Update status with progress
+          if (expectedCount > 0) {
+            this.showStatus(
+              `<span class="spinner-border spinner-border-sm me-2" role="status"></span>Processing: ${processedCount}/${expectedCount} files completed...`,
+              "info",
+              false
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Error polling file list:", error);
+      }
+    }, 2000); // Poll every 2 seconds
+  }
+
+  /**
+   * Stop progressive polling
+   */
+  stopProgressivePolling() {
+    if (this.progressPollingInterval) {
+      clearInterval(this.progressPollingInterval);
+      this.progressPollingInterval = null;
+    }
+  }
+
+  /**
+   * Check for new files and add them to the table without rebuilding
+   * Returns the number of new files added
+   */
+  async checkAndAddNewFiles() {
+    try {
+      const response = await this.apiClient.getFilesList();
+
+      if (!response.success || !response.data) {
+        return 0;
+      }
+
+      // Parse response data
+      let data = [];
+      if (
+        response.data &&
+        response.data.data &&
+        Array.isArray(response.data.data)
+      ) {
+        data = response.data.data;
+      } else if (Array.isArray(response.data)) {
+        data = response.data;
+      }
+
+      // Get currently displayed file IDs
+      const existingFileIds = new Set();
+      this.filesTableBody.find("tr[data-file-id]").each(function () {
+        existingFileIds.add(parseInt($(this).data("file-id")));
+      });
+
+      // Build map of all files from response
+      const fileMap = new Map();
+      data.forEach((item) => {
+        if (item.file && item.file_id) {
+          const filePath = item.file;
+          const originalPath =
+            item.original_filename || filePath.split("/").pop();
+          const fileName = originalPath.split("/").pop();
+          const fileId = item.file_id;
+
+          if (!fileMap.has(fileId)) {
+            fileMap.set(fileId, {
+              path: filePath,
+              fileId: fileId,
+              fileName: fileName,
+              wordCount: 1,
+              original_name: item.original_filename,
+              original_path: originalPath,
+            });
+          } else {
+            fileMap.get(fileId).wordCount += 1;
+          }
+        }
+      });
+
+      // Find new files that aren't in the current table
+      let newFilesAdded = 0;
+      fileMap.forEach((fileData, fileId) => {
+        if (!existingFileIds.has(fileId)) {
+          // This is a new file, append it to the table
+          this.appendFileToTable(fileData, fileId);
+          newFilesAdded++;
+        }
+      });
+
+      // Update file count badge
+      this.updateFileCount(existingFileIds.size + newFilesAdded);
+
+      return newFilesAdded;
+    } catch (error) {
+      console.error("Error checking for new files:", error);
+      return 0;
+    }
+  }
+
+  /**
+   * Append a single file to the table without rebuilding
+   */
+  appendFileToTable(fileData, fileId) {
+    const fileName = fileData.fileName;
+    const originalPath = fileData.original_path;
+    const shortName =
+      fileName.length > 35 ? fileName.substring(0, 32) + "..." : fileName;
+    const iconClass = "bi-file-earmark-text text-primary";
+
+    // Get current row count to determine index
+    const currentRowCount = this.filesTableBody.find("tr[data-file-id]").length;
+    const index = currentRowCount + 1;
+
+    const row = `
+      <tr data-filename="${fileName}" data-file-id="${fileId}" class="slide-up">
+        <td><span class="badge bg-primary">${index}</span></td>
+        <td>
+          <div class="d-flex align-items-center">
+            <span class="file-path-icon" data-path="${this.escapeHtml(
+              originalPath
+            )}">
+              <i class="bi ${iconClass} me-2"></i>
+            </span>
+            <span>${shortName}</span>
+            <small class="text-muted ms-2">(${fileData.wordCount} words)</small>
+          </div>
+        </td>
+        <td>
+          <button class="btn-danger-modern delete-file" data-filename="${fileName}" data-file-id="${fileId}">
+            <i class="bi bi-trash"></i>
+          </button>
+        </td>
+      </tr>`;
+
+    this.filesTableBody.append(row);
+
+    // Re-initialize tooltips for the new row
+    this.initializePathTooltips();
+
+    // Add click handler for the new delete button
+    this.filesTableBody
+      .find(`button[data-file-id="${fileId}"]`)
+      .off("click")
+      .on("click", (e) => {
+        e.preventDefault();
+        const fileName = $(e.currentTarget).data("filename");
+        const fileId = $(e.currentTarget).data("file-id");
+
+        if (
+          confirm(
+            `Are you sure you want to delete "${fileName}"?\n\nThis will permanently delete the file and all its extracted words.`
+          )
+        ) {
+          this.deleteFile(fileId, $(e.currentTarget).closest("tr"));
+        }
+      });
+  }
+
+  /**
+   * Clear the "No files uploaded yet" message from the table
+   */
+  clearNoFilesMessage() {
+    const noResultsRow = this.filesTableBody.find(".no-results").closest("tr");
+    if (noResultsRow.length > 0) {
+      noResultsRow.remove();
+    }
+  }
+
+  /**
+   * Escape HTML to prevent XSS
+   */
+  escapeHtml(text) {
+    const map = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;",
+    };
+    return text.replace(/[&<>"']/g, (m) => map[m]);
   }
 }
 

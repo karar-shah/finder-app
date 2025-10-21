@@ -17,7 +17,7 @@ class FileWordsSerializers(serializers.ModelSerializer):
     Exposes:
       - id, word
       - file (file path/url from the related UploadedFiles)
-      - original_filename from the related UploadedFiles
+      - original_filename from the related UploadedFiles (stores full path or filename)
       - file_id (integer ID)
     """
     file = serializers.FileField(      # or CharField, URLField …
@@ -28,6 +28,8 @@ class FileWordsSerializers(serializers.ModelSerializer):
         source='file_id.original_filename',
         read_only=True
     )
+    # Note: original_path and upload_type fields were removed; we store
+    # the full path/filename in `original_filename` on UploadedFiles.
     file_id = serializers.IntegerField(
         source='file_id.id',
         read_only=True

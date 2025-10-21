@@ -11,10 +11,10 @@ class UploadedFiles(models.Model):
 
     Attributes:
         file: FileField referencing the saved file in MEDIA_ROOT.
-        original_filename: Optional original filename provided by the user.
+        original_filename: Full original path of the file (used for duplicate detection and display).
     """
     file = models.FileField(upload_to='media', null=True, blank=True)
-    original_filename = models.CharField(max_length=255, null=True, blank=True)
+    original_filename = models.CharField(max_length=1024, null=True, blank=True)
 
 class FileWords(models.Model):
     """Represents a single extracted word from an uploaded file.

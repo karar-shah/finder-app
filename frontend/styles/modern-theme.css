@@ -179,6 +179,69 @@ body {
   margin-left: 3.25rem;
 }
 
+/* Theme Switcher */
+.theme-switcher {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.theme-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0;
+}
+
+.theme-select {
+  padding: 0.5rem 1.5rem 0.5rem 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--background);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.4rem center;
+  width: 100px;
+  min-width: unset;
+  max-width: unset;
+}
+
+.theme-select:hover {
+  border-color: var(--primary-color);
+  background-color: var(--background-light);
+}
+
+.theme-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(54, 41, 183, 0.1);
+}
+
+/* Responsive theme switcher */
+@media (max-width: 767.98px) {
+  .theme-switcher {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 1rem;
+  }
+  
+  .theme-select {
+    width: 110px;
+  }
+}
+
+
 /* Cards */
 .modern-card {
   background: var(--background);
@@ -617,6 +680,29 @@ body {
   animation: spin 1s linear infinite;
   display: inline-block;
   margin-right: 0.5rem;
+}
+
+/* Bootstrap-style spinner */
+.spinner-border {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  vertical-align: -0.125em;
+  border: 0.15em solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spinner-border-anim 0.75s linear infinite;
+}
+
+.spinner-border-sm {
+  width: 0.875rem;
+  height: 0.875rem;
+  border-width: 0.125em;
+}
+
+@keyframes spinner-border-anim {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 @keyframes spin {
@@ -1260,4 +1346,62 @@ body {
   padding-right: 1rem;
   padding-left: 1rem;
   margin-top: 1.5rem;
+}
+
+/* File Path Icon with Tooltip */
+.file-path-icon {
+  cursor: help;
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+}
+
+.file-path-icon i {
+  transition: var(--transition);
+}
+
+.file-path-icon:hover i {
+  transform: scale(1.1);
+}
+
+/* Custom Tooltip */
+.custom-tooltip {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.custom-tooltip-inner {
+  background-color: rgba(31, 41, 55, 0.95);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  box-shadow: var(--shadow-lg);
+  text-align: left;
+  word-break: break-all;
+  max-width: 400px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.custom-tooltip-arrow {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid rgba(31, 41, 55, 0.95);
+}
+
+/* Different icon colors based on upload type */
+.bi-folder-fill {
+  color: var(--warning-color) !important;
+}
+
+.bi-file-earmark-text {
+  color: var(--primary-color) !important;
 }

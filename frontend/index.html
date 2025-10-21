@@ -15,15 +15,42 @@
       <!-- App Header -->
       <header class="app-header">
         <div class="container-fluid">
-          <h1 class="app-title">
-            <div class="app-title-icon">
-              <i class="bi bi-search"></i>
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <h1 class="app-title">
+                <div class="app-title-icon">
+                  <i class="bi bi-search"></i>
+                </div>
+                Text Finder App
+              </h1>
+              <p class="app-subtitle">
+                Extract and search words from multiple file formats
+              </p>
             </div>
-            Text Finder App
-          </h1>
-          <p class="app-subtitle">
-            Extract and search words from multiple file formats
-          </p>
+
+            <!-- Theme Switcher -->
+            <div class="theme-switcher">
+              <label for="theme-select" class="theme-label">
+                <i class="bi bi-palette"></i> Theme
+              </label>
+              <select id="theme-select" class="theme-select">
+                <optgroup label="Light">
+                  <option value="default-light" selected>Purple</option>
+                  <option value="blue-light">Blue</option>
+                  <option value="green-light">Green</option>
+                  <option value="orange-light">Orange</option>
+                  <option value="pink-light">Pink</option>
+                </optgroup>
+                <optgroup label="Dark">
+                  <option value="default-dark">Purple</option>
+                  <option value="blue-dark">Blue</option>
+                  <option value="green-dark">Green</option>
+                  <option value="orange-dark">Orange</option>
+                  <option value="pink-dark">Pink</option>
+                </optgroup>
+              </select>
+            </div>
+          </div>
         </div>
       </header>
 
