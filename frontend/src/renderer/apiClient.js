@@ -48,6 +48,105 @@ class APIClient {
   }
 
   /**
+   * Select directory using Electron dialog
+   * Returns directory info with all files and their absolute paths
+   */
+  async selectDirectoryDialog() {
+    if (!this.isElectron) {
+      throw new Error("Directory dialog is only available in Electron");
+    }
+
+    try {
+      const result = await window.electronAPI.selectDirectory();
+      return result;
+    } catch (error) {
+      throw new Error(`Failed to select directory: ${error.message}`);
+    }
+  }
+
+  /**
+   * Select files using Electron dialog
+   * Returns array of file paths
+   */
+  async selectFilesDialog() {
+    if (!this.isElectron) {
+      throw new Error("File dialog is only available in Electron");
+    }
+
+    try {
+      const result = await window.electronAPI.selectFiles();
+      return result;
+    } catch (error) {
+      throw new Error(`Failed to select files: ${error.message}`);
+    }
+  }
+
+  /**
+   * Upload directory with full absolute paths (Electron only)
+   */
+  async uploadDirectoryWithPaths(directoryInfo) {
+    const uploadUrl = `${this.API_BASE_URL}/upload-directory/`;
+
+    if (!this.isElectron) {
+      throw new Error("uploadDirectoryWithPaths is only available in Electron");
+    }
+
+    try {
+      return await this._uploadDirectoryWithPathsElectron(
+        directoryInfo,
+        uploadUrl
+      );
+    } catch (error) {
+      throw new Error(
+        `Failed to upload directory with paths: ${error.message}`
+      );
+    }
+  }
+
+  async _uploadDirectoryWithPathsElectron(directoryInfo, uploadUrl) {
+    try {
+      // Read file contents as buffers with full paths
+      // We need to read files using fetch with file:// protocol in Electron
+      const fileArray = await Promise.all(
+        directoryInfo.files.map(async (fileInfo) => {
+          return new Promise(async (resolve, reject) => {
+            try {
+              // Use fetch to read local file in Electron
+              const response = await fetch(`file://${fileInfo.path}`);
+              const arrayBuffer = await response.arrayBuffer();
+              const uint8Array = new Uint8Array(arrayBuffer);
+
+              resolve({
+                buffer: Array.from(uint8Array),
+                name: fileInfo.name,
+                path: fileInfo.path, // Full absolute path
+                size: fileInfo.size,
+              });
+            } catch (error) {
+              reject(error);
+            }
+          });
+        })
+      );
+
+      console.log(
+        "Uploading directory with absolute paths:",
+        fileArray.map((f) => ({ name: f.name, path: f.path }))
+      );
+
+      const response = await window.electronAPI.uploadDirectory(
+        fileArray,
+        uploadUrl
+      );
+      return response;
+    } catch (error) {
+      throw new Error(
+        `Electron directory upload with paths failed: ${error.message}`
+      );
+    }
+  }
+
+  /**
    * Get uploaded files list
    */
   async getFilesList() {
@@ -94,27 +193,62 @@ class APIClient {
 
   async _uploadFilesElectron(files, uploadUrl) {
     try {
-      // Read file contents as buffers
-      const fileArray = await Promise.all(
-        Array.from(files).map(async (file) => {
-          return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = function (event) {
-              const arrayBuffer = event.target.result;
-              const uint8Array = new Uint8Array(arrayBuffer);
-              resolve({
-                buffer: Array.from(uint8Array), // Convert to regular array for IPC
-                name: file.name,
-                path: file.path || file.name, // Get full absolute path from Electron File object
-                size: file.size,
-                type: file.type,
-              });
-            };
-            reader.onerror = reject;
-            reader.readAsArrayBuffer(file);
-          });
-        })
-      );
+      // Check if files is an array of file paths or File objects
+      const isFilePaths =
+        files.length > 0 &&
+        typeof files[0] === "object" &&
+        files[0].path &&
+        !files[0].size;
+
+      let fileArray;
+
+      if (isFilePaths) {
+        // Files are just path objects, need to read them
+        fileArray = await Promise.all(
+          Array.from(files).map(async (fileObj) => {
+            return new Promise(async (resolve, reject) => {
+              try {
+                // Use fetch to read local file in Electron
+                const response = await fetch(`file://${fileObj.path}`);
+                const arrayBuffer = await response.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+
+                resolve({
+                  buffer: Array.from(uint8Array),
+                  name: fileObj.name,
+                  path: fileObj.path, // Full absolute path
+                  size: arrayBuffer.byteLength,
+                  type: "",
+                });
+              } catch (error) {
+                reject(error);
+              }
+            });
+          })
+        );
+      } else {
+        // Files are regular File objects
+        fileArray = await Promise.all(
+          Array.from(files).map(async (file) => {
+            return new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = function (event) {
+                const arrayBuffer = event.target.result;
+                const uint8Array = new Uint8Array(arrayBuffer);
+                resolve({
+                  buffer: Array.from(uint8Array), // Convert to regular array for IPC
+                  name: file.name,
+                  path: file.path || file.name, // Get full absolute path from Electron File object
+                  size: file.size,
+                  type: file.type,
+                });
+              };
+              reader.onerror = reject;
+              reader.readAsArrayBuffer(file);
+            });
+          })
+        );
+      }
 
       console.log(
         "Uploading via Electron:",

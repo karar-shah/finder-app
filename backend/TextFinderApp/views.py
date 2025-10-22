@@ -133,6 +133,7 @@ def process_single_file(file_path, original_filename=None):
                 data = f.read().split()
                 for id, word in enumerate(data):
                     word_dict[word] = id + 1
+            print(f"TXT - Original word count: {len(data)}, Unique word count: {len(word_dict)}")
                     
         elif file_extension == 'docx':
             doc = Document(saved_path)
@@ -141,6 +142,7 @@ def process_single_file(file_path, original_filename=None):
                 data.extend(para.text.split())
             for id, word in enumerate(data):
                 word_dict[word] = id + 1
+            print(f"DOCX - Original word count: {len(data)}, Unique word count: {len(word_dict)}")
                 
         elif file_extension == 'xlsx':
             wb = load_workbook(saved_path)
@@ -153,6 +155,7 @@ def process_single_file(file_path, original_filename=None):
             for id, word in enumerate(data):
                 word_dict[word] = id + 1
             wb.close()
+            print(f"XLSX - Original word count: {len(data)}, Unique word count: {len(word_dict)}")
             
         elif file_extension == 'pdf':
             text = ""
@@ -180,6 +183,8 @@ def process_single_file(file_path, original_filename=None):
             for id, word in enumerate(data):
                 if word.strip():  # Only process non-empty words
                     word_dict[word] = id + 1
+            print('hi.....')
+            print(f"PDF - Original word count: {len(data)}, Unique word count: {len(word_dict)}")
                 
         elif file_extension == 'wav':
             recognizer = sr.Recognizer()
@@ -190,10 +195,13 @@ def process_single_file(file_path, original_filename=None):
                     data = text.split()
                     for id, word in enumerate(data):
                         word_dict[word] = id + 1
+                    print(f"WAV - Original word count: {len(data)}, Unique word count: {len(word_dict)}")
                 except sr.UnknownValueError:
                     print("Google Speech Recognition could not understand audio")
+                    data = []
                 except sr.RequestError as e:
                     print(f"Could not request results from Google Speech Recognition service; {e}")
+                    data = []
                     
         elif file_extension == 'mp4':
             video = VideoFileClip(saved_path)
@@ -208,6 +216,7 @@ def process_single_file(file_path, original_filename=None):
                 data = text.split()
                 for id, word in enumerate(data):
                     word_dict[word] = id + 1
+            print(f"MP4 - Original word count: {len(data)}, Unique word count: {len(word_dict)}")
             # Clean up temp audio file
             if os.path.exists(temp_audio_path):
                 os.remove(temp_audio_path)
@@ -221,6 +230,7 @@ def process_single_file(file_path, original_filename=None):
             data = text.split()
             for id, word in enumerate(data):
                 word_dict[word] = id + 1
+            print(f"IMAGE ({file_extension.upper()}) - Original word count: {len(data)}, Unique word count: {len(word_dict)}")
                 
         elif file_extension == 'csv':
             import csv
@@ -233,6 +243,7 @@ def process_single_file(file_path, original_filename=None):
                         data.extend(words)
             for id, word in enumerate(data):
                 word_dict[word] = id + 1
+            print(f"CSV - Original word count: {len(data)}, Unique word count: {len(word_dict)}")
         else:
             raise ValueError(f"Unsupported file type: {file_extension}")
             
@@ -245,7 +256,14 @@ def process_single_file(file_path, original_filename=None):
                 word_record.save()
                 saved_word_count += 1
         
-        print(f"Saved {saved_word_count} unique words out of {len(data) if 'data' in locals() else 0} total words")
+        # Log word counts
+        original_count = len(data) if 'data' in locals() else 0
+        unique_count = saved_word_count
+        print(f"=" * 60)
+        print(f"File: {original_filename}")
+        print(f"Original word count: {original_count}")
+        print(f"Unique word count: {unique_count}")
+        print(f"=" * 60)
                 
         return {
             'file': original_filename, 
@@ -265,92 +283,170 @@ def process_single_file(file_path, original_filename=None):
 
 @csrf_exempt
 def upload_directory(request):
-    """Handle directory upload via ZIP file"""
+    """Handle directory upload via ZIP file or individual files with absolute paths"""
     
     if request.method == "POST":
         print("Request method: POST")
         print("Request FILES:", request.FILES.keys())
         print("Request POST:", request.POST.keys())
         
-        zip_file = request.FILES.get('directory_zip')
+        # Get all directory_zip files (can be multiple files sent from Electron with absolute paths)
+        zip_files = request.FILES.getlist('directory_zip')
         
-        if not zip_file:
-            print("No ZIP file found in request.FILES")
-            return JsonResponse({'status': 'error', 'message': 'No ZIP file provided'}, status=400)
+        if not zip_files:
+            print("No files found in request.FILES")
+            return JsonResponse({'status': 'error', 'message': 'No files provided'}, status=400)
         
         results = []
         temp_dir = None
         
         try:
-            # Create temporary directory
-            temp_dir = tempfile.mkdtemp()
+            # Check if we have file_path_0 in POST data (indicates Electron sent absolute paths)
+            has_absolute_paths = 'file_path_0' in request.POST
             
-            # Save and extract ZIP file
-            zip_path = os.path.join(temp_dir, 'upload.zip')
-            with open(zip_path, 'wb') as f:
-                for chunk in zip_file.chunks():
-                    f.write(chunk)
-            
-            # Extract ZIP file
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(temp_dir)
-            
-            # Get supported extensions
-            supported_extensions = get_supported_extensions()
-            
-            # Process all supported files recursively
-            processed_files = 0
-            skipped_files = 0
-            for root, dirs, files in os.walk(temp_dir):
-                for file in files:
-                    if file.endswith('.zip'):  # Skip the original zip file
-                        continue
-                        
-                    file_path = os.path.join(root, file)
-                    file_extension = os.path.splitext(file)[1].lower().lstrip('.')
+            if has_absolute_paths and len(zip_files) > 1:
+                # Multiple files with absolute paths from Electron
+                print("Processing multiple files with absolute paths from Electron")
+                
+                # Get supported extensions
+                supported_extensions = get_supported_extensions()
+                
+                processed_files = 0
+                skipped_files = 0
+                
+                for i, uploaded_file in enumerate(zip_files):
+                    file_name = uploaded_file.name
+                    file_extension = os.path.splitext(file_name)[1].lower().lstrip('.')
                     
-                    if file_extension in supported_extensions:
-                        try:
-                            # Get relative path for original filename
-                            relative_path = os.path.relpath(file_path, temp_dir)
-                            if relative_path.startswith('upload/'):
-                                relative_path = relative_path[7:]  # Remove 'upload/' prefix
+                    if file_extension not in supported_extensions:
+                        continue
+                    
+                    # Get the absolute path from POST data
+                    file_path_key = f'file_path_{i}'
+                    absolute_path = request.POST.get(file_path_key, file_name)
+                    print(f"Processing file {i}: {file_name}, absolute path: {absolute_path}")
+                    
+                    try:
+                        # Save file temporarily
+                        temp_file_path = os.path.join(tempfile.gettempdir(), file_name)
+                        with open(temp_file_path, 'wb') as f:
+                            for chunk in uploaded_file.chunks():
+                                f.write(chunk)
+                        
+                        # Process with absolute path
+                        result = process_single_file(temp_file_path, absolute_path)
+                        results.append(result)
+                        
+                        if result.get('status') == 'skipped':
+                            skipped_files += 1
+                        else:
+                            processed_files += 1
+                        
+                        # Clean up temp file
+                        if os.path.exists(temp_file_path):
+                            os.remove(temp_file_path)
                             
-                            result = process_single_file(file_path, relative_path)
-                            results.append(result)
-                            
-                            if result.get('status') == 'skipped':
-                                skipped_files += 1
-                            else:
-                                processed_files += 1
-                            
-                        except Exception as e:
-                            print(f"Error processing file {file}: {str(e)}")
-                            results.append({
-                                'file': file,
-                                'error': str(e),
-                                'status': 'error'
-                            })
-            
-            if processed_files == 0 and skipped_files == 0:
+                    except Exception as e:
+                        print(f"Error processing file {file_name}: {str(e)}")
+                        results.append({
+                            'file': file_name,
+                            'error': str(e),
+                            'status': 'error'
+                        })
+                
+                if processed_files == 0 and skipped_files == 0:
+                    return JsonResponse({
+                        'status': 'warning', 
+                        'message': 'No supported files found in the directory',
+                        'results': results
+                    }, status=200)
+                
+                message = f'Successfully processed {processed_files} files'
+                if skipped_files > 0:
+                    message += f', skipped {skipped_files} duplicate files'
+                
                 return JsonResponse({
-                    'status': 'warning', 
-                    'message': 'No supported files found in the directory',
+                    'status': 'success',
+                    'message': message,
                     'results': results
-                }, status=200)
+                })
             
-            message = f'Successfully processed {processed_files} files'
-            if skipped_files > 0:
-                message += f', skipped {skipped_files} duplicate files'
-            
-            return JsonResponse({
-                'status': 'success',
-                'message': message,
-                'results': results
-            })
+            else:
+                # Traditional ZIP file upload (web or old method)
+                print("Processing as ZIP file")
+                zip_file = zip_files[0]
+                
+                # Create temporary directory
+                temp_dir = tempfile.mkdtemp()
+                
+                # Save and extract ZIP file
+                zip_path = os.path.join(temp_dir, 'upload.zip')
+                with open(zip_path, 'wb') as f:
+                    for chunk in zip_file.chunks():
+                        f.write(chunk)
+                
+                # Extract ZIP file
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(temp_dir)
+                
+                # Get supported extensions
+                supported_extensions = get_supported_extensions()
+                
+                # Process all supported files recursively
+                processed_files = 0
+                skipped_files = 0
+                for root, dirs, files in os.walk(temp_dir):
+                    for file in files:
+                        if file.endswith('.zip'):  # Skip the original zip file
+                            continue
+                            
+                        file_path = os.path.join(root, file)
+                        file_extension = os.path.splitext(file)[1].lower().lstrip('.')
+                        
+                        if file_extension in supported_extensions:
+                            try:
+                                # Get relative path for original filename
+                                relative_path = os.path.relpath(file_path, temp_dir)
+                                if relative_path.startswith('upload/'):
+                                    relative_path = relative_path[7:]  # Remove 'upload/' prefix
+                                
+                                result = process_single_file(file_path, relative_path)
+                                results.append(result)
+                                
+                                if result.get('status') == 'skipped':
+                                    skipped_files += 1
+                                else:
+                                    processed_files += 1
+                                
+                            except Exception as e:
+                                print(f"Error processing file {file}: {str(e)}")
+                                results.append({
+                                    'file': file,
+                                    'error': str(e),
+                                    'status': 'error'
+                                })
+                
+                if processed_files == 0 and skipped_files == 0:
+                    return JsonResponse({
+                        'status': 'warning', 
+                        'message': 'No supported files found in the directory',
+                        'results': results
+                    }, status=200)
+                
+                message = f'Successfully processed {processed_files} files'
+                if skipped_files > 0:
+                    message += f', skipped {skipped_files} duplicate files'
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'message': message,
+                    'results': results
+                })
             
         except Exception as e:
             print(f"Error processing directory: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return JsonResponse({
                 'status': 'error',
                 'message': f'Error processing directory: {str(e)}'

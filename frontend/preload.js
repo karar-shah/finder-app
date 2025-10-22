@@ -14,6 +14,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   uploadDirectory: (files, uploadUrl) =>
     ipcRenderer.invoke("upload-directory", files, uploadUrl),
 
+  // Directory selection dialog
+  selectDirectory: () => ipcRenderer.invoke("select-directory"),
+
+  // File selection dialog
+  selectFiles: () => ipcRenderer.invoke("select-files"),
+
   // Check if running in Electron
   isElectron: true,
 

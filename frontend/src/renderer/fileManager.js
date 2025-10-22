@@ -26,6 +26,10 @@ class FileManager {
    * Setup event handlers for file operations
    */
   setupEventHandlers() {
+    // Check if running in Electron
+    this.isElectron =
+      window.electronAPI && window.electronAPI.isElectron === true;
+
     // Handle file upload form submission
     $("#upload-form").on("submit", (e) => {
       e.preventDefault();
@@ -42,12 +46,12 @@ class FileManager {
       this.handleClearAll();
     });
 
-    // Handle file input change
+    // Handle file input change (only for web or fallback)
     $("#files").on("change", (e) => {
       this.handleFileSelection(e.target.files, "files");
     });
 
-    // Handle directory input change
+    // Handle directory input change (only for web or fallback)
     $("#directory").on("change", (e) => {
       this.handleFileSelection(e.target.files, "directory");
     });
@@ -59,6 +63,18 @@ class FileManager {
 
     // Remove any existing click handlers to prevent conflicts
     $("#upload-area").off("click");
+
+    // If running in Electron, add click handler for upload area to trigger dialogs
+    if (this.isElectron) {
+      $("#upload-area").on("click", (e) => {
+        const mode = $('input[name="upload-mode"]:checked').attr("id");
+        if (mode === "directory-mode") {
+          this.handleDirectoryDialogSelection();
+        } else {
+          this.handleFilesDialogSelection();
+        }
+      });
+    }
   }
 
   /**
@@ -81,6 +97,20 @@ class FileManager {
       e.preventDefault();
       uploadArea.removeClass("dragover");
 
+      // If running in Electron, always use dialogs for better path handling
+      if (this.isElectron) {
+        const mode = $('input[name="upload-mode"]:checked').attr("id");
+        if (mode === "directory-mode") {
+          // Open the directory dialog
+          this.handleDirectoryDialogSelection();
+        } else {
+          // Open the file dialog
+          this.handleFilesDialogSelection();
+        }
+        return;
+      }
+
+      // Web fallback behavior (no full paths available)
       const files = e.originalEvent.dataTransfer.files;
       if (files.length > 0) {
         const mode = $('input[name="upload-mode"]:checked').attr("id");
@@ -137,20 +167,26 @@ class FileManager {
       );
       uploadBtn.html('<i class="bi bi-upload me-2"></i>Upload Directory');
 
-      // Hide files input completely
-      filesInput.hide();
+      // If running in Electron, hide the file inputs (we'll use dialogs)
+      if (this.isElectron) {
+        filesInput.hide();
+        directoryInput.hide();
+      } else {
+        // For web - hide files input
+        filesInput.hide();
 
-      // Show and position directory input
-      directoryInput.show().css({
-        position: "absolute",
-        top: "0",
-        left: "0",
-        opacity: "0",
-        width: "100%",
-        height: "100%",
-        cursor: "pointer",
-        "z-index": "10",
-      });
+        // Show and position directory input
+        directoryInput.show().css({
+          position: "absolute",
+          top: "0",
+          left: "0",
+          opacity: "0",
+          width: "100%",
+          height: "100%",
+          cursor: "pointer",
+          "z-index": "10",
+        });
+      }
     } else {
       // Switch to files mode
       uploadIcon
@@ -164,20 +200,26 @@ class FileManager {
       );
       uploadBtn.html('<i class="bi bi-upload me-2"></i>Upload Files');
 
-      // Hide directory input completely
-      directoryInput.hide();
+      // If running in Electron, hide both inputs (we'll use dialogs)
+      if (this.isElectron) {
+        filesInput.hide();
+        directoryInput.hide();
+      } else {
+        // For web - hide directory input
+        directoryInput.hide();
 
-      // Show and position files input
-      filesInput.show().css({
-        position: "absolute",
-        top: "0",
-        left: "0",
-        opacity: "0",
-        width: "100%",
-        height: "100%",
-        cursor: "pointer",
-        "z-index": "10",
-      });
+        // Show and position files input
+        filesInput.show().css({
+          position: "absolute",
+          top: "0",
+          left: "0",
+          opacity: "0",
+          width: "100%",
+          height: "100%",
+          cursor: "pointer",
+          "z-index": "10",
+        });
+      }
     }
 
     // Reset selection display
@@ -252,6 +294,66 @@ class FileManager {
   }
 
   /**
+   * Handle directory selection using Electron dialog
+   */
+  async handleDirectoryDialogSelection() {
+    try {
+      const result = await this.apiClient.selectDirectoryDialog();
+
+      if (result.canceled) {
+        return;
+      }
+
+      // Store selected directory info for later upload
+      this.selectedDirectory = result;
+
+      const uploadArea = $("#upload-area");
+      const dirName = result.directoryPath.split("/").pop();
+
+      uploadArea
+        .find(".file-upload-text")
+        .html(`<strong>Directory selected:</strong> ${dirName}`);
+      uploadArea
+        .find(".file-upload-hint")
+        .text(`${result.files.length} files found in directory`);
+    } catch (error) {
+      console.error("Error selecting directory:", error);
+      this.showStatus("Error selecting directory: " + error.message, "danger");
+    }
+  }
+
+  /**
+   * Handle files selection using Electron dialog
+   */
+  async handleFilesDialogSelection() {
+    try {
+      const result = await this.apiClient.selectFilesDialog();
+
+      if (result.canceled) {
+        return;
+      }
+
+      // Store selected files for later upload
+      this.selectedFiles = result.files;
+
+      const uploadArea = $("#upload-area");
+      const fileNames = result.files.map((f) => f.split("/").pop()).join(", ");
+
+      uploadArea
+        .find(".file-upload-text")
+        .html(`<strong>${result.files.length} file(s) selected:</strong>`);
+      uploadArea
+        .find(".file-upload-hint")
+        .text(
+          fileNames.length > 50 ? fileNames.substring(0, 50) + "..." : fileNames
+        );
+    } catch (error) {
+      console.error("Error selecting files:", error);
+      this.showStatus("Error selecting files: " + error.message, "danger");
+    }
+  }
+
+  /**
    * Handle file upload
    */
   async handleFileUpload() {
@@ -268,15 +370,28 @@ class FileManager {
    * Handle individual files upload
    */
   async handleFilesUpload() {
-    const fileInput = $("#files")[0];
-    const files = fileInput.files;
+    let files;
+    let fileCount;
 
-    if (!files || files.length === 0) {
+    // Use selected files from dialog if available (Electron), otherwise use file input
+    if (
+      this.isElectron &&
+      this.selectedFiles &&
+      this.selectedFiles.length > 0
+    ) {
+      // Convert file paths to File objects for upload
+      files = await this.convertFilePathsToFiles(this.selectedFiles);
+      fileCount = files.length;
+    } else {
+      const fileInput = $("#files")[0];
+      files = fileInput.files;
+      fileCount = files ? files.length : 0;
+    }
+
+    if (!files || fileCount === 0) {
       this.showStatus("Please select at least one file to upload", "warning");
       return;
     }
-
-    const fileCount = files.length;
 
     // Remove "No files uploaded yet" message if it exists
     this.clearNoFilesMessage();
@@ -310,6 +425,7 @@ class FileManager {
         await this.loadUploadedFiles();
 
         $("#files").val(""); // Clear file input
+        this.selectedFiles = null; // Clear selected files
         this.resetUploadDisplay();
 
         // Now show success message with results
@@ -345,19 +461,52 @@ class FileManager {
       this.handleUploadError(error);
     }
   }
+
+  /**
+   * Convert file paths to File objects for upload (used in Electron)
+   */
+  async convertFilePathsToFiles(filePaths) {
+    const filePromises = filePaths.map(async (filePath) => {
+      return new Promise((resolve, reject) => {
+        const fileName = filePath.split("/").pop();
+        // Create a File-like object with the full path
+        resolve({
+          name: fileName,
+          path: filePath, // This is the full absolute path
+          // We'll read the file in the apiClient
+        });
+      });
+    });
+
+    return Promise.all(filePromises);
+  }
   /**
    * Handle directory upload
    */
   async handleDirectoryUpload() {
-    const directoryInput = $("#directory")[0];
-    const files = directoryInput.files;
+    let files;
+    let totalFiles;
+    let directoryInfo;
 
-    if (!files || files.length === 0) {
+    // Use selected directory from dialog if available (Electron)
+    if (
+      this.isElectron &&
+      this.selectedDirectory &&
+      this.selectedDirectory.files.length > 0
+    ) {
+      directoryInfo = this.selectedDirectory;
+      files = directoryInfo.files;
+      totalFiles = files.length;
+    } else {
+      const directoryInput = $("#directory")[0];
+      files = directoryInput.files;
+      totalFiles = files ? files.length : 0;
+    }
+
+    if (!files || totalFiles === 0) {
       this.showStatus("Please select a directory to upload", "warning");
       return;
     }
-
-    const totalFiles = files.length;
 
     // Remove "No files uploaded yet" message if it exists
     this.clearNoFilesMessage();
@@ -373,7 +522,14 @@ class FileManager {
     this.startProgressivePolling(totalFiles);
 
     try {
-      const response = await this.apiClient.uploadDirectory(files);
+      let response;
+
+      // If using Electron dialog, call special upload method with full paths
+      if (this.isElectron && directoryInfo) {
+        response = await this.apiClient.uploadDirectoryWithPaths(directoryInfo);
+      } else {
+        response = await this.apiClient.uploadDirectory(files);
+      }
 
       // Stop polling
       this.stopProgressivePolling();
@@ -392,6 +548,7 @@ class FileManager {
         await this.loadUploadedFiles();
 
         $("#directory").val(""); // Clear directory input
+        this.selectedDirectory = null; // Clear selected directory
         this.resetUploadDisplay();
 
         // Now show detailed success message
@@ -589,10 +746,10 @@ class FileManager {
               )}">
                 <i class="bi ${iconClass} me-2"></i>
               </span>
-              <span>${shortName}</span>
-              <small class="text-muted ms-2">(${
-                fileData.wordCount
-              } words)</small>
+              <div class="file-info">
+                <div class="file-name">${shortName}</div>
+                <small class="text-muted">(${fileData.wordCount} words)</small>
+              </div>
             </div>
           </td>
           <td>

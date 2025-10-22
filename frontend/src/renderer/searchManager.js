@@ -224,9 +224,6 @@ class SearchManager {
               </div>
             </div>
           </td>
-          <td>
-            <span class="badge bg-success">${result.count}</span>
-          </td>
         </tr>`;
       this.resultsTableBody.append(row);
       rowIndex++;

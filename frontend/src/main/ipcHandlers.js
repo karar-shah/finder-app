@@ -1,8 +1,10 @@
-const { ipcMain } = require("electron");
+const { ipcMain, dialog } = require("electron");
 const https = require("https");
 const http = require("http");
 const { URL } = require("url");
 const FormData = require("form-data");
+const fs = require("fs");
+const path = require("path");
 
 class IPCHandlers {
   constructor() {
@@ -18,6 +20,106 @@ class IPCHandlers {
 
     // Directory upload handler
     ipcMain.handle("upload-directory", this.handleDirectoryUpload.bind(this));
+
+    // Directory dialog handler
+    ipcMain.handle("select-directory", this.handleSelectDirectory.bind(this));
+
+    // File dialog handler for single files
+    ipcMain.handle("select-files", this.handleSelectFiles.bind(this));
+  }
+
+  /**
+   * Handle directory selection dialog
+   * Returns an array of file objects with full absolute paths
+   */
+  async handleSelectDirectory(event) {
+    try {
+      const result = await dialog.showOpenDialog({
+        properties: ["openDirectory"],
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { canceled: true, files: [] };
+      }
+
+      const directoryPath = result.filePaths[0];
+      const files = await this.getAllFilesInDirectory(directoryPath);
+
+      return {
+        canceled: false,
+        directoryPath: directoryPath,
+        files: files,
+      };
+    } catch (error) {
+      console.error("Error selecting directory:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle file selection dialog for single files
+   * Returns an array of file paths
+   */
+  async handleSelectFiles(event) {
+    try {
+      const result = await dialog.showOpenDialog({
+        properties: ["openFile", "multiSelections"],
+        filters: [
+          {
+            name: "Supported Files",
+            extensions: [
+              "txt",
+              "docx",
+              "xlsx",
+              "pdf",
+              "csv",
+              "png",
+              "jpg",
+              "jpeg",
+              "wav",
+              "mp4",
+            ],
+          },
+          { name: "All Files", extensions: ["*"] },
+        ],
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { canceled: true, files: [] };
+      }
+
+      return {
+        canceled: false,
+        files: result.filePaths,
+      };
+    } catch (error) {
+      console.error("Error selecting files:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Recursively get all files in a directory with full absolute paths
+   */
+  async getAllFilesInDirectory(dirPath, fileList = []) {
+    const files = fs.readdirSync(dirPath);
+
+    for (const file of files) {
+      const filePath = path.join(dirPath, file);
+      const stat = fs.statSync(filePath);
+
+      if (stat.isDirectory()) {
+        await this.getAllFilesInDirectory(filePath, fileList);
+      } else {
+        fileList.push({
+          path: filePath,
+          name: file,
+          size: stat.size,
+        });
+      }
+    }
+
+    return fileList;
   }
 
   async handleHttpRequest(event, options) {
@@ -200,7 +302,7 @@ class IPCHandlers {
 
       console.log(
         "Uploading directory:",
-        files.map((f) => ({ name: f.name, size: f.size }))
+        files.map((f) => ({ name: f.name, path: f.path, size: f.size }))
       );
 
       files.forEach((file, index) => {
@@ -209,6 +311,8 @@ class IPCHandlers {
           const buffer = Buffer.from(file.buffer);
           // Use 'directory_zip' as the field name for directory uploads
           form.append("directory_zip", buffer, file.name);
+          // Send the full absolute path as a separate field for each file
+          form.append(`file_path_${index}`, file.path || file.name);
         } else {
           reject({
             error: `File buffer missing or invalid for: ${file.name}`,

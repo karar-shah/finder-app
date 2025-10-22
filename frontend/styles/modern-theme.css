@@ -1141,10 +1141,39 @@ body {
 
 /* Table container improvements */
 .table-responsive {
-  overflow-x: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   border-radius: var(--radius-lg);
-  max-width: 100%;
+  width: 100%;
+  max-height: 500px;
+  height: 500px;
+}
+
+/* Modern narrow scrollbar styling */
+.table-responsive::-webkit-scrollbar {
+  width: 6px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 10px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  transition: background 0.2s ease;
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* For Firefox */
+.table-responsive {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
 }
 
 .table-container {
@@ -1395,6 +1424,31 @@ body {
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
   border-top: 6px solid rgba(31, 41, 55, 0.95);
+}
+
+/* File path display styles */
+.file-info {
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100% - 30px);
+  overflow: hidden;
+}
+
+.file-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-path {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  margin-bottom: 2px;
 }
 
 /* Different icon colors based on upload type */
